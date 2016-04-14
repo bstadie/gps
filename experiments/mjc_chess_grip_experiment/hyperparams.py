@@ -101,6 +101,9 @@ torque_cost = {
     'wu': 5e-5 / PR2_GAINS,
 }
 
+#np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1])
+#np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2])
+
 fk_cost = {
     'type': CostFK,
     'target_end_effector': np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]),
