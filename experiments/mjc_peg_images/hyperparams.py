@@ -55,6 +55,7 @@ common = {
     'train_conditions': [0],
     'iterations': 10,
     'test_conditions': [0],
+    'no_sample_logging': True,
 }
 
 if not os.path.exists(common['data_files_dir']):

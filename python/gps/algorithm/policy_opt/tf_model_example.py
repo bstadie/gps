@@ -116,6 +116,8 @@ def multi_modal_network(dim_input=27, dim_output=7, batch_size=25, network_confi
 
     nn_input, action, precision = get_input_layer(dim_input, dim_output)
 
+    #state_input = nn_input[:, 0:st_idx[-1]+1]
+    #image_input = nn_input[:, st_idx[-1]+1:im_idx[-1]+1]
     state_input = nn_input[:, 0:st_idx[-1]+1]
     image_input = nn_input[:, st_idx[-1]+1:im_idx[-1]+1]
 

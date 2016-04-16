@@ -38,15 +38,30 @@ common = {
     'data_files_dir': EXP_DIR + 'data_files/',
     'log_filename': EXP_DIR + 'log.txt',
     'conditions': 4,
+    'no_sample_logging': True,
 }
 
 if not os.path.exists(common['data_files_dir']):
     os.makedirs(common['data_files_dir'])
 
+#train
+np.array([0.6, -1.1])
+np.array([-0.3, 0.8])
+np.array([-2.8, 0.3])
+np.array([1.1, 2.0])
+np.array([0.3, -0.2])
+np.array([1.9, 1.0])
+
+#test
+np.array([-3.14/2, 0.1])
+np.array([0.5, 0.3])
+np.array([-2.0/2, -1.0])
+
+
 agent = {
     'type': AgentBox2D,
-    'target_state' : np.array([0, 0]),
-    "world" : ArmWorld,
+    'target_state': np.array([1.9, 1.0]),
+    "world": ArmWorld,
     'x0': [np.array([0.5*np.pi, 0, 0, 0]),
            np.array([0.75*np.pi, 0.5*np.pi, 0, 0]),
            np.array([np.pi, -0.5*np.pi, 0, 0]),
@@ -67,7 +82,7 @@ agent = {
 algorithm = {
     'type': AlgorithmBADMM,
     'conditions': common['conditions'],
-    'iterations': 10,
+    'iterations': 2,
     'lg_step_schedule': np.array([1e-4, 1e-3, 1e-2, 1e-2]),
     'policy_dual_rate': 0.2,
     'ent_reg_schedule': np.array([1e-3, 1e-3, 1e-2, 1e-1]),
@@ -146,13 +161,13 @@ algorithm['policy_prior'] = {
 }
 
 config = {
-    'iterations': 10,
+    'iterations': 3,
     'num_samples': 5,
     'verbose_trials': 5,
     'verbose_policy_trials': 1,
     'common': common,
     'agent': agent,
-    'gui_on': True,
+    'gui_on': False,
     'algorithm': algorithm,
 }
 
