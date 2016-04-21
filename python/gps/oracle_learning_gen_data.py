@@ -52,7 +52,7 @@ def gen_data_box2d_arm(num_samples=10):
     policies_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..',
                                                  'experiments/box2d_badmm_example/data_files/policies/'))
     save_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..',
-                                             'experiments/box2d_badmm_examplee/data_files/master_chief_model/'))
+                                             'experiments/box2d_badmm_example/data_files/master_chief_model/'))
     policy_folders = os.listdir(policies_path)
     dO = 4
     dU = 2
@@ -152,4 +152,4 @@ def init_mujoco_agent_pointmass():
 
 
 if __name__ == '__main__':
-    gen_data_box2d_arm(num_samples=5)
+    gen_data_box2d_arm(num_samples=2)

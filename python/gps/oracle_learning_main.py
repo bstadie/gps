@@ -3,27 +3,26 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation, Merge
 from keras.optimizers import Adam
+import sys
 
-
-def main():
-    train_net_arm()
-    #run_trained_policy()
+sys.path.append('/'.join(str.split(__file__, '/')[:-2]))
 
 
 class KerasPolicy:
     def __init__(self, model, goal):
         self.model = model
+        self.model.compile(loss='mse', optimizer='adam', batch_size=1)
         self.goal = goal
-        print self.goal
+        self.goal = np.expand_dims(self.goal.flatten(), 0)
 
     def act(self, x, obs, t, noise):
         obs = np.expand_dims(obs, 0)
-        return self.model.predict([self.goal, obs])[0]
+        return self.model.predict([self.goal, obs], batch_size=1)[0]
 
 
 def train_net_arm():
     save_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..',
-                                             'experiments/box2d_badmm_examplee/data_files/master_chief_model/'))
+                                             'experiments/box2d_badmm_example/data_files/master_chief_model/'))
     the_data = np.load(save_path + '/the_data.npy')
     the_actions = np.load(save_path + '/the_actions.npy')
     the_goals = np.load(save_path + '/the_goals.npy')
@@ -60,16 +59,52 @@ def train_net_arm():
 
 def run_trained_policy_arm():
     save_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..',
-                                             'experiments/box2d_badmm_examplee/data_files/master_chief_model/'))
+                                             'experiments/box2d_badmm_example/data_files/master_chief_model/'))
     from keras.models import model_from_json
     model = model_from_json(open(save_path + '/oracle_policy.json').read())
     model.load_weights(save_path + '/oracle_weights.h5')
-    goals = [np.array([-3.14/2, 0.1]), np.array([0.5, 0.3]), np.array([-2.0/2, -1.0])]
-    pol = KerasPolicy(model, goal=goals[0])
-    agent, dO, dU = init_mujoco_agent_particle()
-    cond = [0, 1, 2, 3]
-    for condi in cond:
-        agent.sample(pol, condi, save=False)
+    #goals = [np.array([-3.14/2, 0.1]), np.array([0.5, 0.3]), np.array([-2.0/2, -1.0])]
+    #the_goal = goals[2] #np.array([-0.3, 0.8]) #goals[1] #np.array([0.0, 0.0]) #goals[0]
+    num_samps = 120
+    goals_one = 1.5*np.random.randn(num_samps, 2).clip(-3.14/2, 1.9)
+    goals_two = 1.5*np.random.randn(num_samps, 2).clip(-3.14, 3.14)
+    final_state_one = np.zeros((num_samps*4,))
+    final_state_two = np.zeros((num_samps*4,))
+    iter_step = 0
+    for goal_iter in range(0, num_samps):
+        the_goal = goals_one[goal_iter]
+        pol = KerasPolicy(model=model, goal=the_goal)
+        agent = init_box2d_arm(the_goal)
+        cond = [0, 1, 2, 3]
+        for condi in cond:
+            samp = agent.sample(pol, condi, save=False)
+            state = samp.get_X()[99, 0:2]
+            final_state_one[iter_step] = np.sum(np.abs(state - the_goal))
+            print final_state_one[iter_step]
+            iter_step += 1
+            print iter_step
+
+    save_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..',
+                                             'experiments/box2d_badmm_example/data_files/master_chief_model/'))
+    np.set_printoptions(suppress=True)
+    np.savetxt(save_path + '/residuals_train.txt', final_state_one, fmt='%5.8f')
+
+    iter_step = 0
+    for goal_iter in range(0, num_samps):
+        the_goal = goals_two[goal_iter]
+        pol = KerasPolicy(model=model, goal=the_goal)
+        agent = init_box2d_arm(the_goal)
+        cond = [0, 1, 2, 3]
+        for condi in cond:
+            samp = agent.sample(pol, condi, save=False)
+            state = samp.get_X()[99, 0:2]
+            final_state_two[iter_step] = np.sum(np.abs(state - the_goal))
+            print final_state_one[iter_step]
+            iter_step += 1
+            print iter_step
+
+
+    np.savetxt(save_path + '/residuals_test.txt', final_state_two, fmt='%5.8f')
 
 
 def init_box2d_arm(target_state=np.array([0, 0])):
@@ -141,7 +176,7 @@ def train_net_pointmass():
 
 def run_trained_policy_pointmass():
     save_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..',
-                                             'experiments/box2d_badmm_examplee/data_files/master_chief_model/'))
+                                             'experiments/box2d_badmm_example/data_files/master_chief_model/'))
     from keras.models import model_from_json
     model = model_from_json(open(save_path + '/oracle_policy.json').read())
     model.load_weights(save_path + '/oracle_weights.h5')
@@ -159,7 +194,7 @@ def train_net_chess():
 
 def run_trained_policy_chess():
     save_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..',
-                                             'experiments/box2d_badmm_examplee/data_files/master_chief_model/'))
+                                             'experiments/box2d_badmm_example/data_files/master_chief_model/'))
     from keras.models import model_from_json
     model = model_from_json(open(save_path + '/oracle_policy.json').read())
     model.load_weights(save_path + '/oracle_weights.h5')
@@ -199,6 +234,11 @@ def init_mujoco_agent_chess():
     mjc_agent = agent['type'](agent)
     return mjc_agent, dO, dU
 
+
+def main():
+    #train_net_arm()
+    run_trained_policy_arm()
+    #run_trained_policy()
 
 if __name__ == '__main__':
     main()
