@@ -15,12 +15,17 @@ from gps.algorithm.cost.cost_sum import CostSum
 from gps.algorithm.dynamics.dynamics_lr_prior import DynamicsLRPrior
 from gps.algorithm.dynamics.dynamics_prior_gmm import DynamicsPriorGMM
 from gps.algorithm.traj_opt.traj_opt_lqr_python import TrajOptLQRPython
-#from gps.algorithm.policy_opt.policy_opt_caffe import PolicyOptCaffe
 from gps.algorithm.policy_opt.policy_opt_tf import PolicyOptTf
 from gps.algorithm.policy.lin_gauss_init import init_lqr
 from gps.algorithm.policy.policy_prior_gmm import PolicyPriorGMM
 from gps.proto.gps_pb2 import JOINT_ANGLES, JOINT_VELOCITIES, \
-        END_EFFECTOR_POINTS, END_EFFECTOR_POINT_VELOCITIES, ACTION
+        END_EFFECTOR_POINTS, END_EFFECTOR_POINT_VELOCITIES, ACTION, \
+        RGB_IMAGE, RGB_IMAGE_SIZE, GOAL_EE_POINTS
+from gps.algorithm.policy_opt.tf_model_example import multi_modal_network
+
+IMAGE_WIDTH = 80
+IMAGE_HEIGHT = 64
+IMAGE_CHANNELS = 3
 
 
 SENSOR_DIMS = {
@@ -29,13 +34,15 @@ SENSOR_DIMS = {
     END_EFFECTOR_POINTS: 6,
     END_EFFECTOR_POINT_VELOCITIES: 6,
     ACTION: 7,
+    RGB_IMAGE: IMAGE_WIDTH*IMAGE_HEIGHT*IMAGE_CHANNELS,
+    RGB_IMAGE_SIZE: 3,
+    GOAL_EE_POINTS: 6,
 }
 
 PR2_GAINS = np.array([3.09, 1.08, 0.393, 0.674, 0.111, 0.152, 0.098])
 
 BASE_DIR = '/'.join(str.split(gps_filepath, '/')[:-2])
 EXP_DIR = BASE_DIR + '/../experiments/mjc_chess_grip_experiment/'
-
 
 common = {
     'experiment_name': 'my_experiment' + '_' + \
@@ -44,7 +51,11 @@ common = {
     'data_files_dir': EXP_DIR + 'data_files/',
     'target_filename': EXP_DIR + 'target.npz',
     'log_filename': EXP_DIR + 'log.txt',
-    'conditions': 4,
+    'conditions': 9,
+    'train_conditions': range(9),
+    'iterations': 10,
+    'test_conditions': range(9),
+    'no_sample_logging': True,
 }
 
 if not os.path.exists(common['data_files_dir']):
@@ -55,25 +66,36 @@ agent = {
     'filename': './mjc_models/pr2_gripping.xml',
     'x0': np.concatenate([np.array([0.1, 0.1, -1.54, -1.7, 1.54, -0.2, 0]),
                           np.zeros(7)]),
+    'goal_ee': [np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
+                            np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]),
+                            np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])],
     'dt': 0.05,
     'substeps': 5,
     'conditions': common['conditions'],
+    'train_conditions': common['train_conditions'],
+    'test_conditions': common['test_conditions'],
     'pos_body_idx': np.array([1]),
-    'pos_body_offset': [np.array([0, 0.2, 0]), np.array([0, 0.1, 0]),
-                        np.array([0, -0.1, 0]), np.array([0, -0.2, 0])],
+    'pos_body_offset': [np.array([0.0, 0.12, 0]), np.array([0.0, -0.08, 0]), np.array([-0.2, -0.08, 0]),
+                        np.array([0.0, 0.12, 0]), np.array([0.0, -0.08, 0]), np.array([-0.2, -0.08, 0]),
+                        np.array([0.0, 0.12, 0]), np.array([0.0, -0.08, 0]), np.array([-0.2, -0.08, 0])],
     'T': 100,
     'sensor_dims': SENSOR_DIMS,
     'state_include': [JOINT_ANGLES, JOINT_VELOCITIES, END_EFFECTOR_POINTS,
                       END_EFFECTOR_POINT_VELOCITIES],
-    'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES, END_EFFECTOR_POINTS,
-                    END_EFFECTOR_POINT_VELOCITIES],
+    'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES, GOAL_EE_POINTS, RGB_IMAGE],
+    'meta_include': [RGB_IMAGE_SIZE],
+    'image_width': IMAGE_WIDTH,
+    'image_height': IMAGE_HEIGHT,
+    'image_channels': IMAGE_CHANNELS,
     'camera_pos': np.array([0., 0., 2., 0., 0.2, 0.5]),
 }
 
 algorithm = {
     'type': AlgorithmBADMM,
     'conditions': common['conditions'],
-    'iterations': 10,
+    'iterations': common['iterations'],
+    'train_conditions': common['train_conditions'],
+    'test_conditions': common['test_conditions'],
     'lg_step_schedule': np.array([1e-4, 1e-3, 1e-2, 1e-2]),
     'policy_dual_rate': 0.2,
     'ent_reg_schedule': np.array([1e-3, 1e-3, 1e-2, 1e-1]),
@@ -103,10 +125,15 @@ torque_cost = {
 
 #np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1])
 #np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2])
+#    'target_end_effector': [np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]),
+#                            np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])],
+#'target_end_effector': np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
 
 fk_cost = {
     'type': CostFK,
-    'target_end_effector': np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]),
+    'target_end_effector': [np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
+                            np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]),
+                            np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])],
     'wp': np.array([1, 1, 1, 1, 1, 1]),
     'l1': 0.1,
     'l2': 10.0,
@@ -137,14 +164,16 @@ algorithm['traj_opt'] = {
 algorithm['policy_opt'] = {
     'type': PolicyOptTf,
     'network_params': {
-        'dim_hidden': [10],
         'num_filters': [5, 10],
-        'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES],
-        'obs_vector_data': [JOINT_ANGLES, JOINT_VELOCITIES],
-        'obs_image_data': [],
+        'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES, RGB_IMAGE],
+        'obs_vector_data': [JOINT_ANGLES, JOINT_VELOCITIES, GOAL_EE_POINTS],
+        'obs_image_data': [RGB_IMAGE],
+        'image_width': IMAGE_WIDTH,
+        'image_height': IMAGE_HEIGHT,
+        'image_channels': IMAGE_CHANNELS,
         'sensor_dims': SENSOR_DIMS,
-        'batch_size': 25,
     },
+    'network_model': multi_modal_network,
     'iterations': 1000,
     'weights_file_prefix': EXP_DIR + 'policy',
 }
@@ -156,10 +185,11 @@ algorithm['policy_prior'] = {
     'max_samples': 20,
 }
 
+num_samples = 5
 config = {
     'iterations': algorithm['iterations'],
-    'num_samples': 5,
-    'verbose_trials': 1,
+    'num_samples': num_samples,
+    'verbose_trials': num_samples,  # this must be set in this way to generate images!
     'verbose_policy_trials': 1,
     'common': common,
     'agent': agent,

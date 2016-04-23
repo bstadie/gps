@@ -110,9 +110,11 @@ class AlgorithmBADMM(Algorithm):
     def _update_step_size(self):
         """ Evaluate costs on samples, and adjust the step size. """
         # Evaluate cost function for all conditions and samples.
+        iter_step = 0
         for m in range(self.M):
             self._update_policy_fit(m, init=True)
             self._eval_cost(m)
+            iter_step += 1
             # Adjust step size relative to the previous iteration.
             if self.iteration_count >= 1 and self.prev[m].sample_list:
                 self._stepadjust(m)

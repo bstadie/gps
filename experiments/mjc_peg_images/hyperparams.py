@@ -51,10 +51,10 @@ common = {
     'data_files_dir': EXP_DIR + 'data_files/',
     'target_filename': EXP_DIR + 'target.npz',
     'log_filename': EXP_DIR + 'log.txt',
-    'conditions': 1,
-    'train_conditions': [0],
+    'conditions': 4,
+    'train_conditions': [0, 1, 2, 3],
     'iterations': 10,
-    'test_conditions': [0],
+    'test_conditions': [0, 1, 2, 3],
     'no_sample_logging': True,
 }
 
@@ -72,7 +72,8 @@ agent = {
     'train_conditions': common['train_conditions'],
     'test_conditions': common['test_conditions'],
     'pos_body_idx': np.array([1]),
-    'pos_body_offset': [np.array([0, 0.2, 0])],
+    'pos_body_offset': [np.array([0, 0.2, 0]), np.array([0, 0.1, 0]),
+                        np.array([0, -0.1, 0]), np.array([0, -0.2, 0])],
     'T': 100,
     'sensor_dims': SENSOR_DIMS,
     'state_include': [JOINT_ANGLES, JOINT_VELOCITIES, END_EFFECTOR_POINTS,

@@ -23,6 +23,7 @@ enum SampleType {
   RGB_IMAGE_SIZE = 16;
   DOMAIN_IMAGE = 17;
   DOMAIN_IMAGE_SIZE = 18;
+  GOAL_EE_POINTS = 19;
 }
 
 // Message containing the data for a single sample.

@@ -131,7 +131,7 @@ class Algorithm(object):
         for n in range(N):
             sample = self.cur[cond].sample_list[n]
             # Get costs.
-            l, lx, lu, lxx, luu, lux = self.cost[cond].eval(sample)
+            l, lx, lu, lxx, luu, lux = self.cost[cond].eval(sample, cond)
             cc[n, :] = l
             cs[n, :] = l
 

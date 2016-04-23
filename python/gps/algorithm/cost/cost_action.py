@@ -14,7 +14,7 @@ class CostAction(Cost):
         config.update(hyperparams)
         Cost.__init__(self, config)
 
-    def eval(self, sample):
+    def eval(self, sample, condition):
         """
         Evaluate cost function and derivatives on a sample.
         Args:

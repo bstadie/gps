@@ -187,6 +187,11 @@ class GPSMain(object):
             pol_sample_lists: policy samples as SampleList object
         Returns: None
         """
+        #box2d_dir = '/home/bradly/gps/experiments/mjc_chess_grip_experiment/data_files/policies/' + str(itr)
+        #target = self._hyperparams['algorithm']['cost']['costs'][1]['target_end_effector'] #mucjoco arm
+        #self.algorithm.policy_opt.policy.pickle_policy(self.agent.dO, self.agent.dU,
+        #                                               box2d_dir,
+        #                                               goal_state=target, should_hash=False)
         if self.gui:
             self.gui.set_status_text('Logging data and updating GUI.')
             self.gui.update(itr, self.algorithm, self.agent,
@@ -213,12 +218,12 @@ class GPSMain(object):
     def _end(self):
         """ Finish running and exit. """
         #target = self._hyperparams['algorithm']['cost']['data_types'].values()[0]['target_state'] # mujoco pointmass
-        target = self._hyperparams['algorithm']['cost']['costs'][1]['data_types'].values()[0]['target_state'] #box2d
-        box2d_dir = '/home/bradly/gps/experiments/box2d_badmm_example/data_files/policies/'
+        #target = self._hyperparams['algorithm']['cost']['costs'][1]['data_types'].values()[0]['target_state'] #box2d
+        #box2d_dir = '/home/bradly/gps/experiments/box2d_badmm_example/data_files/policies/'
         #target = self._hyperparams['algorithm']['cost']['costs'][1]['target_end_effector'] #mucjoco arm
-        self.algorithm.policy_opt.policy.pickle_policy(self.agent.dO, self.agent.dU,
-                                                       box2d_dir,
-                                                       goal_state=target, should_hash=True)
+        #self.algorithm.policy_opt.policy.pickle_policy(self.agent.dO, self.agent.dU,
+        #                                               box2d_dir,
+        #                                               goal_state=target, should_hash=True)
         if self.gui:
             self.gui.set_status_text('Training complete.')
             self.gui.end_mode()

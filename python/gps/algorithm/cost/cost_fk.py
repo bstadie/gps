@@ -20,7 +20,7 @@ class CostFK(Cost):
         config.update(hyperparams)
         Cost.__init__(self, config)
 
-    def eval(self, sample):
+    def eval(self, sample, condition):
         """
         Evaluate forward kinematics (end-effector penalties) cost.
         Temporary note: This implements the 'joint' penalty type from
@@ -48,7 +48,7 @@ class CostFK(Cost):
         lux = np.zeros((T, dU, dX))
 
         # Choose target.
-        tgt = self._hyperparams['target_end_effector']
+        tgt = self._hyperparams['target_end_effector'][condition]
         pt = sample.get(END_EFFECTOR_POINTS)
         dist = pt - tgt
         # TODO - These should be partially zeros so we're not double

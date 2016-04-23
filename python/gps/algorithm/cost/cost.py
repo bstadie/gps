@@ -10,7 +10,7 @@ class Cost(object):
         self._hyperparams = hyperparams
 
     @abc.abstractmethod
-    def eval(self, sample):
+    def eval(self, sample, condition):
         """
         Evaluate cost function and derivatives.
         Args:

@@ -97,8 +97,8 @@ def multi_modal_network(dim_input=27, dim_output=7, batch_size=25, network_confi
     Returns:
         A tfMap object that stores inputs, outputs, and scalar loss.
     """
-    n_layers = 2
-    layer_size = 10
+    n_layers = 3
+    layer_size = 32
     dim_hidden = (n_layers - 1)*[layer_size]
     dim_hidden.append(dim_output)
     pool_size = 2
