@@ -19,6 +19,7 @@ class CostFK(Cost):
         config = copy.deepcopy(COST_FK)
         config.update(hyperparams)
         Cost.__init__(self, config)
+        self.iter_step = 0
 
     def eval(self, sample, condition):
         """
@@ -32,6 +33,11 @@ class CostFK(Cost):
         T = sample.T
         dX = sample.dX
         dU = sample.dU
+
+        self.iter_step += 1
+        print self.iter_step
+
+
 
         wpm = get_ramp_multiplier(
             self._hyperparams['ramp_option'], T,
@@ -49,6 +55,8 @@ class CostFK(Cost):
 
         # Choose target.
         tgt = self._hyperparams['target_end_effector'][condition]
+        #if self.iter_step > 25: #switch goals after 25 t-steps.
+            #tgt = np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])
         pt = sample.get(END_EFFECTOR_POINTS)
         dist = pt - tgt
         # TODO - These should be partially zeros so we're not double

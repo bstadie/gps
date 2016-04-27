@@ -43,15 +43,19 @@ class TfPolicy(Policy):
         # Normalize obs.
         if len(obs.shape) == 1:
             obs = np.expand_dims(obs, axis=0)
-        obs[:, self.st_idx] = obs[:, self.st_idx].dot(self.scale) + self.bias
+        #print obs.shape
+        #self.st_idx = 18
+        #obs[:, self.st_idx] = obs[:, self.st_idx].dot(self.scale) + self.bias
+        obs[:, 0:17] = obs[:, 0:17].dot(self.scale) + self.bias
         with tf.device(self.device_string):
             action_mean = self.sess.run(self.act_op, feed_dict={self.obs_tensor: obs})
+            #return action_mean + np.random.randn(1, 7)
         if noise is None:
             u = action_mean + np.random.randn(1, 7)
             print 'kay'
         else:
-            #u = action_mean + self.chol_pol_covar.T.dot(noise)
-            u = action_mean + np.random.randn(1, 7)/4
+            u = action_mean + self.chol_pol_covar.T.dot(noise)
+            #u = action_mean + np.random.randn(1, 7)/4
         return u[0]
 
     def pickle_policy(self, deg_obs, deg_action, checkpoint_path, goal_state=None, should_hash=False):

@@ -36,7 +36,7 @@ SENSOR_DIMS = {
     ACTION: 7,
     RGB_IMAGE: IMAGE_WIDTH*IMAGE_HEIGHT*IMAGE_CHANNELS,
     RGB_IMAGE_SIZE: 3,
-    GOAL_EE_POINTS: 6,
+    GOAL_EE_POINTS: 3,
 }
 
 PR2_GAINS = np.array([3.09, 1.08, 0.393, 0.674, 0.111, 0.152, 0.098])
@@ -61,14 +61,30 @@ common = {
 if not os.path.exists(common['data_files_dir']):
     os.makedirs(common['data_files_dir'])
 
+    #'goal_ee': [np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
+    #                        np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]),
+    #                        np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])],
+
+    #'goal_ee': [np.array([1, 0, 0]), np.array([1, 0, 0]), np.array([1, 0, 0]),
+    #                        np.array([0, 1, 0]), np.array([0, 1, 0]), np.array([0, 1, 0]),
+    #                        np.array([0, 0, 1]), np.array([0, 0, 1]), np.array([0, 0, 1])],
+
+        #'pos_body_offset': [np.array([0.0, 0.12, 0]), np.array([0.0, -0.08, 0]), np.array([-0.2, -0.08, 0]),
+        #                np.array([0.0, 0.12, 0]), np.array([0.0, -0.08, 0]), np.array([-0.2, -0.08, 0]),
+        #                np.array([0.0, 0.12, 0]), np.array([0.0, -0.08, 0]), np.array([-0.2, -0.08, 0])],
+
+obs_include = [JOINT_ANGLES, JOINT_VELOCITIES, GOAL_EE_POINTS, RGB_IMAGE]
+obs_vector_data = obs_include[:len(obs_include)-1]
+obs_image_data = [obs_include[-1]]
+
 agent = {
     'type': AgentMuJoCo,
     'filename': './mjc_models/pr2_gripping.xml',
     'x0': np.concatenate([np.array([0.1, 0.1, -1.54, -1.7, 1.54, -0.2, 0]),
                           np.zeros(7)]),
-    'goal_ee': [np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
-                            np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]),
-                            np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])],
+    'goal_ee': [np.array([1, 0, 0]), np.array([1, 0, 0]), np.array([1, 0, 0]),
+                np.array([0, 1, 0]), np.array([0, 1, 0]), np.array([0, 1, 0]),
+                np.array([0, 0, 1]), np.array([0, 0, 1]), np.array([0, 0, 1])],
     'dt': 0.05,
     'substeps': 5,
     'conditions': common['conditions'],
@@ -82,7 +98,7 @@ agent = {
     'sensor_dims': SENSOR_DIMS,
     'state_include': [JOINT_ANGLES, JOINT_VELOCITIES, END_EFFECTOR_POINTS,
                       END_EFFECTOR_POINT_VELOCITIES],
-    'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES, GOAL_EE_POINTS, RGB_IMAGE],
+    'obs_include': obs_include,
     'meta_include': [RGB_IMAGE_SIZE],
     'image_width': IMAGE_WIDTH,
     'image_height': IMAGE_HEIGHT,
@@ -129,11 +145,19 @@ torque_cost = {
 #                            np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])],
 #'target_end_effector': np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
 
+    #'target_end_effector': [np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]),
+    #                        np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1])],
+
+    #'target_end_effector': [np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
+    #                        np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]),
+    #                        np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])],
+
+
 fk_cost = {
     'type': CostFK,
     'target_end_effector': [np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]), np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
                             np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]),
-                            np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2]), np.array([0.0, 1.3, -0.5, 0.0, 1.3, -0.2])],
+                            np.array([0.25, 0.3, -0.3, 0.25, 0.3, -0.2]), np.array([0.25, 0.3, -0.3, 0.25, 0.3, -0.2]), np.array([0.25, 0.3, -0.3, 0.25, 0.3, -0.2])],
     'wp': np.array([1, 1, 1, 1, 1, 1]),
     'l1': 0.1,
     'l2': 10.0,
@@ -165,9 +189,9 @@ algorithm['policy_opt'] = {
     'type': PolicyOptTf,
     'network_params': {
         'num_filters': [5, 10],
-        'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES, RGB_IMAGE],
-        'obs_vector_data': [JOINT_ANGLES, JOINT_VELOCITIES, GOAL_EE_POINTS],
-        'obs_image_data': [RGB_IMAGE],
+        'obs_include': obs_include,
+        'obs_vector_data': obs_vector_data,
+        'obs_image_data': obs_image_data,
         'image_width': IMAGE_WIDTH,
         'image_height': IMAGE_HEIGHT,
         'image_channels': IMAGE_CHANNELS,
@@ -193,7 +217,7 @@ config = {
     'verbose_policy_trials': 1,
     'common': common,
     'agent': agent,
-    'gui_on': True,
+    'gui_on': False,
     'algorithm': algorithm,
 }
 
