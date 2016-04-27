@@ -160,6 +160,91 @@ def multi_modal_network(dim_input=27, dim_output=7, batch_size=25, network_confi
     return TfMap.init_from_lists([nn_input, action, precision], [fc_output], [loss])
 
 
+def multi_modal_network_spatial_softmax(dim_input=27, dim_output=7, batch_size=25, network_config=None):
+    """
+    An example a network in theano that has both state and image inputs.
+    Args:
+        dim_input: Dimensionality of input.
+        dim_output: Dimensionality of the output.
+        batch_size: Batch size.
+        network_config: dictionary of network structure parameters
+    Returns:
+        A tfMap object that stores inputs, outputs, and scalar loss.
+    """
+    n_layers = 3
+    layer_size = 20
+    dim_hidden = (n_layers - 1)*[layer_size]
+    dim_hidden.append(dim_output)
+    pool_size = 2
+    filter_size = 3
+
+    # List of indices for state (vector) data and image (tensor) data in observation.
+    x_idx, img_idx, i = [], [], 0
+    for sensor in network_config['obs_include']:
+        dim = network_config['sensor_dims'][sensor]
+        if sensor in network_config['obs_image_data']:
+            img_idx = img_idx + list(range(i, i+dim))
+        else:
+            x_idx = x_idx + list(range(i, i+dim))
+        i += dim
+
+    nn_input, action, precision = get_input_layer(dim_input, dim_output)
+
+    state_input = nn_input[:, 0:x_idx[-1]+1]
+    image_input = nn_input[:, x_idx[-1]+1:img_idx[-1]+1]
+
+    # image goes through 2 convnet layers
+    num_filters = network_config['num_filters']
+
+    im_height = network_config['image_height']
+    im_width = network_config['image_width']
+    num_channels = network_config['image_channels']
+    image_input = tf.reshape(image_input, [-1, num_channels, im_width, im_height])
+    image_input = tf.transpose(image_input, perm=[0,3,2,1])
+
+    # we pool twice, each time reducing the image size by a factor of 2.
+    conv_out_size = int(im_width/(2.0*pool_size)*im_height/(2.0*pool_size)*num_filters[1])
+    first_dense_size = conv_out_size + len(x_idx)
+
+    # Store layers weight & bias
+    weights = {
+        'wc1': get_xavier_weights([filter_size, filter_size, num_channels, num_filters[0]], (pool_size, pool_size)), # 5x5 conv, 1 input, 32 outputs
+        'wc2': get_xavier_weights([filter_size, filter_size, num_filters[0], num_filters[1]], (pool_size, pool_size)), # 5x5 conv, 32 inputs, 64 outputs
+    }
+
+    biases = {
+        'bc1': init_bias([num_filters[0]]),
+        'bc2': init_bias([num_filters[1]]),
+    }
+
+    conv_layer_0 = conv2d(img=image_input, w=weights['wc1'], b=biases['bc1'])
+
+    conv_layer_1 = conv2d(img=conv_layer_0, w=weights['wc2'], b=biases['bc2'])
+
+    full_y = np.tile(np.arange(im_width), (im_height,1))
+    full_x = np.tile(np.arange(im_height), (im_width,1)).T
+    full_x = tf.convert_to_tensor(np.reshape(full_x, [-1,1]), dtype=tf.float32)
+    full_y = tf.convert_to_tensor(np.reshape(full_y, [-1,1] ), dtype=tf.float32)
+    feature_points = []
+    for filter_number in range(num_filters[1]):
+        conv_filter_chosen = conv_layer_1[:,:,:,filter_number]
+        conv_filter_chosen = tf.reshape(conv_filter_chosen, [-1, im_width*im_height])
+        conv_softmax = tf.nn.softmax(conv_filter_chosen)
+        feature_points_x = tf.matmul(conv_softmax, full_x)
+        feature_points_y = tf.matmul(conv_softmax, full_y)
+        feature_points.append(feature_points_x)
+        feature_points.append(feature_points_y)
+    full_feature_points = tf.concat(concat_dim=1, values=feature_points)
+    
+    fc_input = tf.concat(concat_dim=1, values=[full_feature_points, state_input])
+
+    fc_output = get_mlp_layers(fc_input, n_layers, dim_hidden)
+
+    loss = euclidean_loss_layer(a=action, b=fc_output, precision=precision, batch_size=batch_size)
+
+    return TfMap.init_from_lists([nn_input, action, precision], [fc_output], [loss])
+
+
 def conv2d(img, w, b):
     return tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(img, w, strides=[1, 1, 1, 1], padding='SAME'), b))
 
