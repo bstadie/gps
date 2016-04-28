@@ -11,7 +11,7 @@ from gps.agent.config import AGENT_MUJOCO
 from gps.proto.gps_pb2 import JOINT_ANGLES, JOINT_VELOCITIES, \
         END_EFFECTOR_POINTS, END_EFFECTOR_POINT_VELOCITIES, \
         END_EFFECTOR_POINT_JACOBIANS, ACTION, RGB_IMAGE, RGB_IMAGE_SIZE, \
-        CONTEXT_IMAGE, CONTEXT_IMAGE_SIZE
+        CONTEXT_IMAGE, CONTEXT_IMAGE_SIZE, GOAL_EE_POINTS
 
 from gps.sample.sample import Sample
 
@@ -182,6 +182,8 @@ class AgentMuJoCo(Agent):
             sample.set(RGB_IMAGE_SIZE, [self._hyperparams['image_channels'],
                                         self._hyperparams['image_width'],
                                         self._hyperparams['image_height']], t=None)
+        if GOAL_EE_POINTS in self.obs_data_types:
+            sample.set(GOAL_EE_POINTS, self._hyperparams['goal_ee'].flatten(), t=0)
         return sample
 
     def _set_sample(self, sample, mj_X, t, condition):
@@ -209,6 +211,8 @@ class AgentMuJoCo(Agent):
             img = self._world[condition].get_image_scaled(self._hyperparams['image_width'],
                                                           self._hyperparams['image_height'])
             sample.set(RGB_IMAGE, np.transpose(img["img"], (2, 1, 0)).flatten(), t=t+1)
+        if GOAL_EE_POINTS in self.obs_data_types:
+            sample.set(GOAL_EE_POINTS, self._hyperparams['goal_ee'][condition].flatten(), t=t+1)
 
     def _get_image_from_obs(self, obs):
         imstart = 0
