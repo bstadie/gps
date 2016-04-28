@@ -85,7 +85,7 @@ def example_tf_network(dim_input=27, dim_output=7, batch_size=25, network_config
     return TfMap.init_from_lists([nn_input, action, precision], [mlp_applied], [loss_out])
 
 
-def trop_gps_tf_network(dim_input=27, dim_output=7, batch_size=25, network_config=None):
+def trpo_gps_tf_network(dim_input=27, dim_output=7, batch_size=25, network_config=None):
     """
     An example of how one might want to specify a network in tensorflow.
 
