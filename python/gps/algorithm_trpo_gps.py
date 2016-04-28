@@ -22,17 +22,19 @@ class AlgorithmTRPOGPS:
         self.agent = None
         self.device_string = "/gpu:" + str(0)
         agent = self._hyperparams['agent']
-        self.T = self._hyperparams['T'] = agent.T
-        self.dU = self._hyperparams['dU'] = agent.dU
-        self.dX = self._hyperparams['dX'] = agent.dX
-        self.dO = self._hyperparams['dO'] = agent.dO
+        self.T = self._hyperparams['T']
+        self.dU = self._hyperparams['dU']
+        self.dX = self._hyperparams['dX']
+        self.dO = self._hyperparams['dO']
         self.num_samples = self._hyperparams['samples']
         self.agent_hyper = agent
         self.lin_gauss_weights = []
         self.lin_gauss_bias = []
         self.lin_gauss_states = None
         self.lin_gauss_actions = None
+        self.lin_gauss_pol = None
         self.loss_ops = []
+        self.loss_tensors = []
         self.K = None
         self.k = None
         self.init_lin_gauss_arch()
@@ -52,19 +54,27 @@ class AlgorithmTRPOGPS:
         w_shape = (self.T, self.dU, self.dX)
         self.K = np.zeros(w_shape)
         self.k = np.zeros((self.T, self.dU))
+        self.lin_gauss_states = tf.placeholder("float", [None, self.dX])
+        self.lin_gauss_actions = tf.placeholder("float", [None, self.dU])
         for time_step in range(0, self.T):
-            w_init = np.random.randn(self.num_samples, w_shape[1], w_shape[2])
-            b_init = np.zeros(self.num_samples, w_shape[2])
-            self.lin_gauss_weights.append(tf.Variable(initial_value=w_init))
-            self.lin_gauss_bias.append(tf.Variable(initial_value=b_init))
-            the_loss = batched_matrix_vector_multiply(self.lin_gauss_states[time_step], self.lin_gauss_weights[time_step])
+            w_init_shape = (1, w_shape[1], w_shape[2])
+            b_init_shape = (1, w_shape[1])
+            w = tf.Variable(tf.random_normal(w_init_shape, stddev=0.01))
+            b = tf.Variable(tf.zeros(b_init_shape, dtype='float'))
+            w = tf.tile(w, [self.num_samples, 1, 1])
+            b = tf.tile(b, [self.num_samples, 1])
+            self.lin_gauss_weights.append(w)
+            self.lin_gauss_bias.append(b)
+            the_loss = batched_matrix_vector_multiply(vector=self.lin_gauss_states,
+                                                      matrix=self.lin_gauss_weights[time_step])
             the_loss = tf.add(the_loss, self.lin_gauss_bias[time_step])
-            loss = tf.pow(tf.sub(the_loss, self.lin_gauss_actions[time_step]), 2)
+            loss = tf.pow(tf.sub(the_loss, self.lin_gauss_actions), 2)
+            loss = tf.cast(loss, 'float32')
             loss = tf.reduce_mean(loss)
             optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.1).minimize(loss)
             self.loss_ops.append(optimizer)
-        self.lin_gauss_states = tf.placeholder("float", [None, self.dX])
-        self.lin_gauss_actions = tf.placeholder("float", [None, self.dU])
+            self.loss_tensors.append(loss)
+
 
     def iteration(self, goal_ee, x0):
         """
@@ -77,7 +87,7 @@ class AlgorithmTRPOGPS:
         self.agent_hyper.update({'x0': x0})
         self.init_agent(self.agent_hyper)
         trajs = self.sample_trajectories_from_net_pol(self.agent_hyper['samples'])
-        self.linearize_net_pol_to_lin_guass_pol(trajs)
+        self.lin_gauss_pol = self.linearize_net_pol_to_lin_guass_pol(trajs)
         self.update_lin_gauss_pol()
         self.update_dynamics()
         self.sample_updated_lin_gauss_pol()
@@ -90,38 +100,42 @@ class AlgorithmTRPOGPS:
         return trajs
 
     def linearize_net_pol_to_lin_guass_pol(self, trajs):
-        training_iters = 20
+        training_iters = 5
         for time_step in range(0, self.T):
-            print time_step
             states = np.zeros(shape=(self.num_samples, self.dX))
             actions = np.zeros(shape=(self.num_samples, self.dU))
             for sample_step in range(0, len(trajs)):
                 states[sample_step] = trajs[sample_step].get_X()[time_step]
                 actions[sample_step] = trajs[sample_step].get_U()[time_step]
             loss_op = self.loss_ops[time_step]
+            actual_loss = self.loss_tensors[time_step]
             for training_step in range(0, training_iters):
-                self.sess.run(loss_op, feed_dict={self.lin_gauss_states: states, self.lin_gauss_actions: actions})
+                al = self.sess.run([loss_op, actual_loss], feed_dict={self.lin_gauss_states: states, self.lin_gauss_actions: actions})[1]
 
             k_t, b_t = self.sess.run([self.lin_gauss_weights[time_step], self.lin_gauss_bias[time_step]])
-            self.K[time_step] = k_t
-            self.k[time_step] = b_t
+            self.K[time_step] = k_t[0]
+            self.k[time_step] = b_t[0]
+            print k_t[0]
         return init_from_known_traj(self.K, self.k, init_var=5.0, T=self.T, dU=self.dU)
 
     def update_lin_gauss_pol(self):
         pass
 
     def sample_updated_lin_gauss_pol(self):
-        pass
+        trajs = []
+        for iter_step in range(0, self.num_samples):
+            trajs.append(self.agent.sample(self.lin_gauss_pol, 0, save=False))
+        return trajs
 
     def train_net_on_sample(self):
         pass
 
 
 def batched_matrix_vector_multiply(vector, matrix):
-    """ computes x^T A in mini-batches. """
-    vector_batch_as_matricies = tf.expand_dims(vector, [1])
-    mult_result = tf.batch_matmul(vector_batch_as_matricies, matrix)
-    squeezed_result = tf.squeeze(mult_result, [1])
+    """ computes Ax in mini-batches. """
+    vector_batch_as_matricies = tf.expand_dims(vector, [2])
+    mult_result = tf.batch_matmul(matrix, vector_batch_as_matricies)
+    squeezed_result = tf.squeeze(mult_result, [2])
     return squeezed_result
 
 
@@ -144,7 +158,7 @@ def get_hyper_params_chess():
 
     agent = {
         'type': AgentMuJoCo,
-        'filename': './mjc_models/pr2_gripping.xml',
+        'filename': './mjc_models/pr2_arm3d.xml',
         'x0': np.concatenate([np.array([0.1, 0.1, -1.54, -1.7, 1.54, -0.2, 0]),
                               np.zeros(7)]),
         'dt': 0.05,
@@ -179,8 +193,8 @@ def testing_shit():
     alg.init_agent(agent)
     trajs = alg.sample_trajectories_from_net_pol(5)
     alg.lin_gauss_pol = alg.linearize_net_pol_to_lin_guass_pol(trajs)
+    alg.sample_updated_lin_gauss_pol()
 
 
-def main():
-    testing_shit()
+testing_shit()
 

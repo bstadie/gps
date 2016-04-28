@@ -45,13 +45,13 @@ class TfPolicy(Policy):
         # Normalize obs.
         if len(obs.shape) == 1:
             obs = np.expand_dims(obs, axis=0)
-        obs[:, self.x_idx] = obs[:, self.x_idx].dot(self.scale) + self.bias
+        #obs[:, self.x_idx] = obs[:, self.x_idx].dot(self.scale) + self.bias
         with tf.device(self.device_string):
             action_mean = self.sess.run(self.act_op, feed_dict={self.obs_tensor: obs})
         if noise is None:
-            u = action_mean
+            u = action_mean + np.random.randn(1, 7)
         else:
-            u = action_mean + self.chol_pol_covar.T.dot(noise)
+            u = action_mean + np.random.randn(1, 7)#self.chol_pol_covar.T.dot(noise)
         return u[0]  # the DAG computations are batched by default, but we use batch size 1.
 
     def pickle_policy(self, deg_obs, deg_action, checkpoint_path, goal_state=None, should_hash=False):
