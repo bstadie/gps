@@ -85,6 +85,29 @@ def example_tf_network(dim_input=27, dim_output=7, batch_size=25, network_config
     return TfMap.init_from_lists([nn_input, action, precision], [mlp_applied], [loss_out])
 
 
+def trop_gps_tf_network(dim_input=27, dim_output=7, batch_size=25, network_config=None):
+    """
+    An example of how one might want to specify a network in tensorflow.
+
+    Args:
+        dim_input: Dimensionality of input.
+        dim_output: Dimensionality of the output.
+        batch_size: Batch size.
+    Returns:
+        a TfMap object used to serialize, inputs, outputs, and loss.
+    """
+    n_layers = 2
+    dim_hidden = (n_layers - 1) * [40]
+    dim_hidden.append(dim_output)
+
+    nn_input, action, precision = get_input_layer(dim_input, dim_output)
+    mlp_applied = get_mlp_layers(nn_input, n_layers, dim_hidden)
+    loss_out = tf.pow(tf.sub(mlp_applied, action), 2)
+    #loss_out = get_loss_layer(mlp_out=mlp_applied, action=action, precision=precision, batch_size=batch_size)
+
+    return TfMap.init_from_lists([nn_input, action, precision], [mlp_applied], [loss_out])
+
+
 def multi_modal_network(dim_input=27, dim_output=7, batch_size=25, network_config=None):
     """
     An example a network in theano that has both state and image inputs.

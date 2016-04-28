@@ -140,3 +140,10 @@ def init_pd(hyperparams):
     invPSig = (1.0 / config['init_var']) * np.tile(np.eye(dU), [T, 1, 1])
 
     return LinearGaussianPolicy(K, k, PSig, cholPSig, invPSig)
+
+
+def init_from_known_traj(K, k, init_var, T, dU):
+    PSig = init_var * np.tile(np.eye(dU), [T, 1, 1])
+    cholPSig = np.sqrt(init_var) * np.tile(np.eye(dU), [T, 1, 1])
+    invPSig = (1.0 / init_var) * np.tile(np.eye(dU), [T, 1, 1])
+    return LinearGaussianPolicy(K, k, PSig, cholPSig, invPSig)
