@@ -13,6 +13,7 @@ from gps.algorithm.policy.lin_gauss_init import init_from_known_traj
 from gps.algorithm.policy.tf_policy import TfPolicy
 from gps.algorithm.policy_opt.tf_utils import TfSolver
 from gps.algorithm.algorithm_traj_opt import AlgorithmTrajOpt
+from gps.sample.sample_list import SampleList
 
 
 class AlgorithmTRPOGPS:
@@ -23,13 +24,13 @@ class AlgorithmTRPOGPS:
         self._hyperparams = hyperparams
         self.agent = None
         self.device_string = "/gpu:" + str(0)
-        agent = self._hyperparams['agent']
+        self.agent_hyper = self._hyperparams['agent_hyper']
         self.T = self._hyperparams['T']
         self.dU = self._hyperparams['dU']
         self.dX = self._hyperparams['dX']
         self.dO = self._hyperparams['dO']
         self.num_samples = self._hyperparams['samples']
-        self.agent_hyper = agent
+        self.init_agent(agent_hyper=self.agent_hyper)
 
         self.lin_gauss_weights = []
         self.lin_gauss_bias = []
@@ -67,6 +68,7 @@ class AlgorithmTRPOGPS:
 
     def init_agent(self, agent_hyper):
         self.agent = agent_hyper['type'](agent_hyper)
+        self._hyperparams.update({'agent': self.agent})
 
     def init_lin_gauss_arch(self):
         w_shape = (self.T, self.dU, self.dX)
@@ -95,7 +97,8 @@ class AlgorithmTRPOGPS:
             self.loss_tensors.append(loss)
 
     def init_traj_opt_alg(self):
-        traj_opt = AlgorithmTrajOpt(self._hyperparams['alg'])
+        self._hyperparams['alg_hyper'].update({'agent': self.agent})
+        traj_opt = AlgorithmTrajOpt(self._hyperparams['alg_hyper'])
         if self.traj_opt_alg is not None:
             traj_opt.dynamics.prior = self.traj_opt_alg.dynamics.get_prior()
         self.traj_opt_alg = traj_opt
@@ -119,7 +122,7 @@ class AlgorithmTRPOGPS:
         Run iteration of policy gradient-GPS hybrid algorithm.
 
         Args:
-            sample_lists: List of SampleList objects for each condition.
+            sample_lists: goal position, start position.
         """
         self.agent_hyper.update({'goal_ee': goal_ee})
         self.agent_hyper.update({'x0': x0})
@@ -165,10 +168,12 @@ class AlgorithmTRPOGPS:
         return lin_gauss
 
     def fit_dynamics(self, sample_list):
-        self.traj_opt_alg.update_only_dynamics(sample_list)
+        t = SampleList(sample_list)
+        self.traj_opt_alg.update_only_dynamics(t)
 
     def update_lin_gauss_pol(self, sample_list):
-        self.traj_opt_alg.iteration(sample_list)
+        t = SampleList(sample_list)
+        self.traj_opt_alg.iteration(t, cheat=True)
         self.lin_gauss_pol = self.traj_opt_alg.cur[0].traj_distr
 
     def sample_lin_gauss_pol(self, num_samples=None):
@@ -257,7 +262,7 @@ def get_hyper_params_chess():
     return agent
 
 
-def get_traj_opt_hyper(agent):
+def get_traj_opt_hyper(agent, T, dU, dX, dO, samples):
     from gps.algorithm.algorithm_traj_opt import AlgorithmTrajOpt
     from gps.algorithm.cost.cost_fk import CostFK
     from gps.algorithm.cost.cost_action import CostAction
@@ -267,10 +272,16 @@ def get_traj_opt_hyper(agent):
     from gps.algorithm.traj_opt.traj_opt_lqr_python import TrajOptLQRPython
     from gps.algorithm.policy.lin_gauss_init import init_lqr
 
+
     algorithm = {
         'type': AlgorithmTrajOpt,
         'conditions': 1,
         'iterations': 10,
+        'T': T,
+        'dU': dU,
+        'dX': dX,
+        'dO': dO,
+        'samples': samples
     }
 
     PR2_GAINS = np.array([3.09, 1.08, 0.393, 0.674, 0.111, 0.152, 0.098])
@@ -324,8 +335,6 @@ def get_traj_opt_hyper(agent):
 
     algorithm['policy_opt'] = {}
 
-    algorithm['agent'] = agent
-
     return algorithm
 
 
@@ -339,34 +348,53 @@ def load_pol():
 
 
 def testing_shit():
-    agent = get_hyper_params_chess()
-    alg_hyper = get_traj_opt_hyper(agent)
+    agent_hyper = get_hyper_params_chess()
+    T = 100
+    dU = 7
+    dX = 26
+    dO = 29
+    samples = 5
+    alg_hyper = get_traj_opt_hyper(agent_hyper, T, dU, dX, dO, samples)
     hyper = {
-        'T': 100,
-        'dU': 7,
-        'dX': 26,
-        'dO': 29,
-        'samples': 5,
-        'agent': agent,
-        'alg': alg_hyper
+        'T': T,
+        'dU': dU,
+        'dX': dX,
+        'dO': dO,
+        'samples': samples,
+        'agent_hyper': agent_hyper,
+        'alg_hyper': alg_hyper
     }
     alg = AlgorithmTRPOGPS(hyper)
-    alg.init_agent(agent)
-    alg.net_policy = load_pol()
-    trajs = alg.sample_trajectories_from_net_pol(hyper['samples'])
-    alg.lin_gauss_pol = alg.linearize_net_pol_to_lin_guass_pol(trajs)
-
-    #alg.init_traj_opt_alg()
-    #alg.fit_dynamics(trajs)
-
-    lin_gauss_trajs = alg.sample_lin_gauss_pol(hyper['samples'])
-
-    #alg.update_lin_gauss_pol(lin_gauss_trajs)
-
-    nu_lin_gauss_trajs = alg.sample_lin_gauss_pol(hyper['samples'])
-    alg.train_net_on_sample(nu_lin_gauss_trajs)
+    alg.take_first_iter(np.array([0, 0, 1]), np.concatenate([np.array([0.1, 0.1, -1.54, -1.7, 1.54, -0.2, 0]),
+                                                             np.zeros(7)]))
+    for iter_step in range(0, 10):
+        alg.iteration(np.array([0, 0, 1]), np.concatenate([np.array([0.1, 0.1, -1.54, -1.7, 1.54, -0.2, 0]),
+                                                           np.zeros(7)]))
 
 
+def test_traj_opt():
+    agent_hyper = get_hyper_params_chess()
+    T = 100
+    dU = 7
+    dX = 26
+    dO = 29
+    samples = 5
+    alg_hyper = get_traj_opt_hyper(agent_hyper, T, dU, dX, dO, samples)
+    hyper = {
+        'T': T,
+        'dU': dU,
+        'dX': dX,
+        'dO': dO,
+        'samples': samples,
+        'agent_hyper': agent_hyper,
+        'alg_hyper': alg_hyper
+    }
+    alg = AlgorithmTRPOGPS(hyper)
+    alg.init_traj_opt_alg()
+    for iter_step in range(0, 10):
+        lin_gauss_trajs = alg.sample_lin_gauss_pol(hyper['samples'])
+        alg.update_lin_gauss_pol(lin_gauss_trajs)
 
-testing_shit()
+
+test_traj_opt()
 

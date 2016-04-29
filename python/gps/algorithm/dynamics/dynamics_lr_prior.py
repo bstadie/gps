@@ -18,6 +18,7 @@ class DynamicsLRPrior(Dynamics):
         """ Update dynamics prior. """
         X = samples.get_X()
         U = samples.get_U()
+        print X.shape
         self.prior.update(X, U)
 
     def get_prior(self):

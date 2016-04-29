@@ -14,7 +14,7 @@ class AlgorithmTrajOpt(Algorithm):
     def __init__(self, hyperparams):
         Algorithm.__init__(self, hyperparams)
 
-    def iteration(self, sample_lists):
+    def iteration(self, sample_lists, cheat=False):
         """
         Run iteration of LQR.
         Args:
@@ -22,6 +22,9 @@ class AlgorithmTrajOpt(Algorithm):
         """
         for m in range(self.M):
             self.cur[m].sample_list = sample_lists[m]
+        if cheat is True:
+            self.cur[0].sample_list = sample_lists
+
 
         # Update dynamics model using all samples.
         self._update_dynamics()
@@ -36,7 +39,7 @@ class AlgorithmTrajOpt(Algorithm):
 
     def update_only_dynamics(self, sample_lists):
         for m in range(self.M):
-            self.cur[m].sample_list = sample_lists[m]
+            self.cur[m].sample_list = sample_lists
 
         # Update dynamics model using all samples.
         self._update_dynamics()
