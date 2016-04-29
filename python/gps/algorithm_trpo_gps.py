@@ -104,7 +104,7 @@ class AlgorithmTRPOGPS:
         else:
             self.lin_gauss_pol = self.traj_opt_alg.cur[0].traj_distr
 
-    def take_first_iter(self, goal_ee, x0):
+    def take_first_iter(self, goal_ee, x0):  # the first iteration goes backwards for stability reasons.
         self.agent_hyper.update({'goal_ee': goal_ee})
         self.agent_hyper.update({'x0': x0})
         self.init_agent(self.agent_hyper)
@@ -158,7 +158,7 @@ class AlgorithmTRPOGPS:
             self.k[time_step] = b_t[0]
         print np.var(actions)/(100*2*7*5000)
         lin_gauss = init_from_known_traj(self.K, self.k, init_var=np.var(actions), T=self.T, dU=self.dU)
-        if self.lin_gauss_pol is not None:
+        if self.lin_gauss_pol is not None:  # i have no idea how to set this shit.
             lin_gauss.pol_covar = self.lin_gauss_pol.pol_covar
             lin_gauss.chol_pol_covar = self.lin_gauss_pol.chol_pol_covar
             lin_gauss.inv_pol_covar = self.lin_gauss_pol.inv_pol_covar
@@ -355,11 +355,16 @@ def testing_shit():
     alg.net_policy = load_pol()
     trajs = alg.sample_trajectories_from_net_pol(hyper['samples'])
     alg.lin_gauss_pol = alg.linearize_net_pol_to_lin_guass_pol(trajs)
+
+    #alg.init_traj_opt_alg()
     #alg.fit_dynamics(trajs)
-    #alg.update_lin_gauss_pol()
-    trajs2 = alg.sample_lin_gauss_pol(hyper['samples'])
-    alg.train_net_on_sample(trajs2)
-    #alg.update_dynamics_prior([trajs, trajs2])
+
+    lin_gauss_trajs = alg.sample_lin_gauss_pol(hyper['samples'])
+
+    #alg.update_lin_gauss_pol(lin_gauss_trajs)
+
+    nu_lin_gauss_trajs = alg.sample_lin_gauss_pol(hyper['samples'])
+    alg.train_net_on_sample(nu_lin_gauss_trajs)
 
 
 
