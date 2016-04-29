@@ -34,6 +34,13 @@ class AlgorithmTrajOpt(Algorithm):
 
         self._advance_iteration_variables()
 
+    def update_only_dynamics(self, sample_lists):
+        for m in range(self.M):
+            self.cur[m].sample_list = sample_lists[m]
+
+        # Update dynamics model using all samples.
+        self._update_dynamics()
+
     def _update_step_size(self):
         """ Evaluate costs on samples, and adjust the step size. """
         # Evaluate cost function for all conditions and samples.

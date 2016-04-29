@@ -103,6 +103,7 @@ def trpo_gps_tf_network(dim_input=27, dim_output=7, batch_size=25, network_confi
     nn_input, action, precision = get_input_layer(dim_input, dim_output)
     mlp_applied = get_mlp_layers(nn_input, n_layers, dim_hidden)
     loss_out = tf.pow(tf.sub(mlp_applied, action), 2)
+    loss_out = tf.reduce_mean(loss_out)
     #loss_out = get_loss_layer(mlp_out=mlp_applied, action=action, precision=precision, batch_size=batch_size)
 
     return TfMap.init_from_lists([nn_input, action, precision], [mlp_applied], [loss_out])

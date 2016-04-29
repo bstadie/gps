@@ -99,7 +99,7 @@ class TfSolver:
         else:
             raise NotImplementedError("Please select a valid optimizer.")
 
-    def __call__(self, feed_dict, sess, device_string="/cpu:0"):
+    def __call__(self, feed_dict, sess, device_string="/gpu:0"):
         with tf.device(device_string):
             loss = sess.run([self.loss_scalar, self.solver_op], feed_dict)
             return loss[0]

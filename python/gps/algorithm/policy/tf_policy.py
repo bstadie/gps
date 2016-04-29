@@ -31,6 +31,7 @@ class TfPolicy(Policy):
         self.scale = None  # must be set from elsewhere based on observations
         self.bias = None
         self.x_idx = None
+        self.tf_map = None
 
     def act(self, x, obs, t, noise):
         """
@@ -96,5 +97,6 @@ class TfPolicy(Policy):
         cls_init.chol_pol_covar = pol_dict['chol_pol_covar']
         cls_init.scale = pol_dict['scale']
         cls_init.bias = pol_dict['bias']
+        cls_init.tf_map = tf_map
         return cls_init
 
