@@ -52,6 +52,9 @@ class AlgorithmTRPOGPS:
         self.net_policy = self.init_net_pol()
         self.sess.run(tf.initialize_all_variables())
 
+        self.all_trajs = []
+        self.iter_count = 0
+
         #self.take_first_iter(self.agent_hyper['goal_ee'], self.agent_hyper['x0'])
 
     def init_net_pol(self):
@@ -91,7 +94,7 @@ class AlgorithmTRPOGPS:
             loss = tf.pow(tf.sub(the_loss, self.lin_gauss_actions[time_step]), 2)
             loss = tf.cast(loss, 'float32')
             loss = tf.reduce_mean(loss)
-            optimizer = tf.train.MomentumOptimizer(learning_rate=0.01, momentum=0.4).minimize(loss)
+            optimizer = tf.train.MomentumOptimizer(learning_rate=0.01, momentum=0.9).minimize(loss)
             #tf.train.GradientDescentOptimizer(learning_rate=0.05).minimize(loss)
             self.loss_ops.append(optimizer)
             self.loss_tensors.append(loss)
@@ -100,7 +103,7 @@ class AlgorithmTRPOGPS:
         self._hyperparams['alg_hyper'].update({'agent': self.agent})
         traj_opt = AlgorithmTrajOpt(self._hyperparams['alg_hyper'])
         if self.traj_opt_alg is not None:
-            traj_opt.dynamics.prior = self.traj_opt_alg.dynamics.get_prior()
+            traj_opt.cur[0].traj_info.dynamics = self.traj_opt_alg.cur[0].traj_info.dynamics
         self.traj_opt_alg = traj_opt
         if self.lin_gauss_pol is not None:
             self.traj_opt_alg.cur[0].traj_distr = self.lin_gauss_pol
@@ -112,7 +115,7 @@ class AlgorithmTRPOGPS:
         self.agent_hyper.update({'x0': x0})
         self.init_agent(self.agent_hyper)
         self.init_traj_opt_alg()
-        lin_gauss_trajs = self.sample_lin_gauss_pol(self.agent_hyper['samples'])
+        lin_gauss_trajs = self.sample_lin_gauss_pol(self.num_samples)
         self.update_lin_gauss_pol(lin_gauss_trajs)
         nu_lin_gauss_trajs = self.sample_lin_gauss_pol()
         self.train_net_on_sample(nu_lin_gauss_trajs)
@@ -127,13 +130,15 @@ class AlgorithmTRPOGPS:
         self.agent_hyper.update({'goal_ee': goal_ee})
         self.agent_hyper.update({'x0': x0})
         self.init_agent(self.agent_hyper)
-        trajs = self.sample_trajectories_from_net_pol(self.agent_hyper['samples'])
+        trajs = self.sample_trajectories_from_net_pol(self.num_samples)
         self.lin_gauss_pol = self.linearize_net_pol_to_lin_guass_pol(trajs)
         self.init_traj_opt_alg()
         self.fit_dynamics(trajs)
-        lin_gauss_trajs = self.sample_lin_gauss_pol(self.agent_hyper['samples'])
+        lin_gauss_trajs = self.sample_lin_gauss_pol(self.num_samples)
+        self.all_trajs += lin_gauss_trajs
         self.update_lin_gauss_pol(lin_gauss_trajs)
         nu_lin_gauss_trajs = self.sample_lin_gauss_pol()
+        self.all_trajs += nu_lin_gauss_trajs
         self.train_net_on_sample(nu_lin_gauss_trajs)
 
     def sample_trajectories_from_net_pol(self, num_samples):
@@ -143,7 +148,7 @@ class AlgorithmTRPOGPS:
         return trajs
 
     def linearize_net_pol_to_lin_guass_pol(self, trajs):
-        training_iters = 10
+        training_iters = 20
         for time_step in range(0, self.T):
             states = np.zeros(shape=(self.num_samples, self.dX))
             actions = np.zeros(shape=(self.num_samples, self.dU))
@@ -159,7 +164,6 @@ class AlgorithmTRPOGPS:
             k_t, b_t = self.sess.run([self.lin_gauss_weights[time_step], self.lin_gauss_bias[time_step]])
             self.K[time_step] = k_t[0]
             self.k[time_step] = b_t[0]
-        print np.var(actions)/(100*2*7*5000)
         lin_gauss = init_from_known_traj(self.K, self.k, init_var=np.var(actions), T=self.T, dU=self.dU)
         if self.lin_gauss_pol is not None:  # i have no idea how to set this shit.
             lin_gauss.pol_covar = self.lin_gauss_pol.pol_covar
@@ -172,8 +176,13 @@ class AlgorithmTRPOGPS:
         self.traj_opt_alg.update_only_dynamics(t)
 
     def update_lin_gauss_pol(self, sample_list):
-        t = SampleList(sample_list)
-        self.traj_opt_alg.iteration(t, cheat=True)
+        self.all_trajs += sample_list
+        self.traj_opt_alg.iteration(SampleList(self.all_trajs), cheat=True)
+        self.lin_gauss_pol = self.traj_opt_alg.cur[0].traj_distr
+        t = self.sample_lin_gauss_pol()
+        self.all_trajs += t
+        sample_list += t
+        self.traj_opt_alg.iteration(SampleList(self.all_trajs), cheat=True)
         self.lin_gauss_pol = self.traj_opt_alg.cur[0].traj_distr
 
     def sample_lin_gauss_pol(self, num_samples=None):
@@ -194,6 +203,16 @@ class AlgorithmTRPOGPS:
         
         obs = np.reshape(obs, (num_samples*self.T, self.dO))
         actions = np.reshape(actions, (num_samples*self.T, self.dU))
+
+        if self.iter_count == 0:  # compute scale and bias.
+            self.net_policy.x_idx = range(self.dO)
+            self.x_idx = self.net_policy.x_idx
+            std = np.std(obs[:, self.x_idx], axis=0)
+            std[26] = 0.1
+            std[27] = 0.1
+            self.net_policy.scale = np.diag(1.0 / std)
+            self.net_policy.bias = -np.mean(obs[:, self.x_idx].dot(self.net_policy.scale), axis=0)
+        obs[:, self.x_idx] = obs[:, self.x_idx].dot(self.net_policy.scale) + self.net_policy.bias
         
         batch_size = 25
         batches_per_epoch = np.floor(num_samples*self.T / batch_size)
@@ -201,7 +220,7 @@ class AlgorithmTRPOGPS:
         np.random.shuffle(idx)
 
         average_loss = 0
-        for i in range(1000):
+        for i in range(2025):
             # Load in data for this batch.
             start_idx = int(i * batch_size %
                             (batches_per_epoch * batch_size))
@@ -212,6 +231,7 @@ class AlgorithmTRPOGPS:
             if i % 500 == 0 and i != 0:
                 print 'tf loss is ' + str(average_loss/500)
                 average_loss = 0
+        self.iter_count += 1
 
 
 def batched_matrix_vector_multiply(vector, matrix):
@@ -305,7 +325,7 @@ def get_traj_opt_hyper(agent, T, dU, dX, dO, samples):
 
     fk_cost = {
         'type': CostFK,
-        'target_end_effector': np.array([0.0, 0.3, -0.5, 0.0, 0.3, -0.2]),
+        'target_end_effector': np.array([-0.1, 0.5, -0.3, -0.1, 0.5, -0.1]), #np.array([0.25, 0.7, -0.3, 0.25, 0.7, -0.2]),
         'wp': np.array([1, 1, 1, 1, 1, 1]),
         'l1': 0.1,
         'l2': 10.0,
@@ -353,7 +373,7 @@ def testing_shit():
     dU = 7
     dX = 26
     dO = 29
-    samples = 5
+    samples = 2
     alg_hyper = get_traj_opt_hyper(agent_hyper, T, dU, dX, dO, samples)
     hyper = {
         'T': T,
@@ -367,9 +387,22 @@ def testing_shit():
     alg = AlgorithmTRPOGPS(hyper)
     alg.take_first_iter(np.array([0, 0, 1]), np.concatenate([np.array([0.1, 0.1, -1.54, -1.7, 1.54, -0.2, 0]),
                                                              np.zeros(7)]))
+
     for iter_step in range(0, 10):
         alg.iteration(np.array([0, 0, 1]), np.concatenate([np.array([0.1, 0.1, -1.54, -1.7, 1.54, -0.2, 0]),
                                                            np.zeros(7)]))
+
+    #alg.net_policy = load_pol()
+    #trajs = alg.sample_trajectories_from_net_pol(hyper['samples'])
+    #alg.init_traj_opt_alg()
+    #alg.lin_gauss_pol = alg.linearize_net_pol_to_lin_guass_pol(trajs)
+    #alg.fit_dynamics(trajs)
+    #all_trajs = []
+    #for iter_step in range(0, 3):
+    #    lin_gauss_trajs = alg.sample_lin_gauss_pol(hyper['samples'])
+    #    all_trajs += lin_gauss_trajs
+    #    alg.update_lin_gauss_pol(all_trajs)
+
 
 
 def test_traj_opt():
@@ -378,7 +411,7 @@ def test_traj_opt():
     dU = 7
     dX = 26
     dO = 29
-    samples = 5
+    samples = 2
     alg_hyper = get_traj_opt_hyper(agent_hyper, T, dU, dX, dO, samples)
     hyper = {
         'T': T,
@@ -391,9 +424,11 @@ def test_traj_opt():
     }
     alg = AlgorithmTRPOGPS(hyper)
     alg.init_traj_opt_alg()
+    all_trajs = []
     for iter_step in range(0, 10):
         lin_gauss_trajs = alg.sample_lin_gauss_pol(hyper['samples'])
-        alg.update_lin_gauss_pol(lin_gauss_trajs)
+        all_trajs += lin_gauss_trajs
+        alg.update_lin_gauss_pol(all_trajs)
 
 
 test_traj_opt()

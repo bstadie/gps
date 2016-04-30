@@ -50,9 +50,9 @@ class TfPolicy(Policy):
         with tf.device(self.device_string):
             action_mean = self.sess.run(self.act_op, feed_dict={self.obs_tensor: obs})
         if noise is None:
-            u = action_mean + 1.5*np.random.randn(1, 7)
+            u = action_mean #+ 1.5*np.random.randn(1, 7)
         else:
-            u = action_mean + 1.5*np.random.randn(1, 7) #self.chol_pol_covar.T.dot(noise)
+            u = action_mean + 0.0001*np.random.randn(1, 7) #+ self.chol_pol_covar.T.dot(noise)
         return u[0]  # the DAG computations are batched by default, but we use batch size 1.
 
     def pickle_policy(self, deg_obs, deg_action, checkpoint_path, goal_state=None, should_hash=False):

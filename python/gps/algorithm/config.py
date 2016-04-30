@@ -8,7 +8,7 @@ ALG = {
     'inner_iterations': 1,  # Number of iterations.
     'min_eta': 1e-5,  # Minimum initial lagrange multiplier in DGD for
                       # trajectory optimization.
-    'kl_step':0.2,
+    'kl_step': 1.2,
     'min_step_mult':0.01,
     'max_step_mult':10.0,
     'sample_decrease_var':0.5,
