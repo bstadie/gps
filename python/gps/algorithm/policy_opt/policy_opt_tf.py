@@ -118,6 +118,7 @@ class PolicyOptTf(PolicyOpt):
         if itr == 0 and inner_itr == 1:
             self.policy.x_idx = self.x_idx
             self.policy.scale = np.diag(1.0 / np.std(obs[:, self.x_idx], axis=0))
+            self.policy.scale[self.policy.scale == np.inf] = 0.1
             self.policy.bias = -np.mean(obs[:, self.x_idx].dot(self.policy.scale), axis=0)
         obs[:, self.x_idx] = obs[:, self.x_idx].dot(self.policy.scale) + self.policy.bias
 

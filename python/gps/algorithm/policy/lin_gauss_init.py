@@ -54,6 +54,9 @@ def init_lqr(hyperparams):
         np.zeros(dX - dU*2), np.ones(dU)
     ]))
     Ltt = Ltt / config['init_var']  # Cost function - quadratic term.
+    #print dU
+    #print x0.shape
+    #print Ltt.shape
     lt = -Ltt.dot(np.r_[x0, np.zeros(dU)])  # Cost function - linear term.
 
     # Perform dynamic programming.
@@ -142,8 +145,24 @@ def init_pd(hyperparams):
     return LinearGaussianPolicy(K, k, PSig, cholPSig, invPSig)
 
 
-def init_from_known_traj(K, k, init_var, T, dU):
+def init_from_known_traj(K, k, PSig, cholPSig, invPSig):
+    #PSig = init_var * np.tile(np.eye(dU), [T, 1, 1])
+    #cholPSig = np.sqrt(init_var) * np.tile(np.eye(dU), [T, 1, 1])
+    #invPSig = (1.0 / init_var) * np.tile(np.eye(dU), [T, 1, 1])
+    return LinearGaussianPolicy(K, k, PSig, cholPSig, invPSig)
+
+def init_from_known_traj_two(K, k, dU, T, init_var):
     PSig = init_var * np.tile(np.eye(dU), [T, 1, 1])
     cholPSig = np.sqrt(init_var) * np.tile(np.eye(dU), [T, 1, 1])
-    invPSig = (1.0 / init_var) * np.tile(np.eye(dU), [T, 1, 1])
+    invPSig = init_var * np.tile(np.eye(dU), [T, 1, 1])
     return LinearGaussianPolicy(K, k, PSig, cholPSig, invPSig)
+
+
+def init_from_known_traj_three(K, k, u, T, dU):
+    psig = np.tile(np.eye(dU), [T, 1, 1])
+    for iter_step in range(0, T):
+        u_step = u[iter_step]
+        psig[iter_step] = np.cov(u_step)
+    #cholPSig =
+
+

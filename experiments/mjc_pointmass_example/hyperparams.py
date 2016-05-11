@@ -13,17 +13,67 @@ from gps.algorithm.cost.cost_state import CostState
 from gps.algorithm.dynamics.dynamics_lr_prior import DynamicsLRPrior
 from gps.algorithm.dynamics.dynamics_prior_gmm import DynamicsPriorGMM
 from gps.algorithm.traj_opt.traj_opt_lqr_python import TrajOptLQRPython
-from gps.algorithm.policy_opt.policy_opt_caffe import PolicyOptCaffe
+from gps.algorithm.policy_opt.policy_opt_tf import PolicyOptTf
 from gps.algorithm.policy.lin_gauss_init import init_lqr
 from gps.algorithm.policy.policy_prior import PolicyPrior
-from gps.proto.gps_pb2 import JOINT_ANGLES, JOINT_VELOCITIES, ACTION
+from gps.proto.gps_pb2 import JOINT_ANGLES, JOINT_VELOCITIES, ACTION, GOAL_EE_POINTS
 from gps.gui.config import generate_experiment_info
+from gps.algorithm.policy_opt.tf_model_example import example_tf_network
+from gps.algorithm.algorithm_trpo_gps import AlgorithmTRPOGPS
+
+
+goals = [
+    [0, 1.],
+    [0.4, 0.4],
+    [0.2, 0.2],
+    [0.8, 0.8],
+    [0.1, 0.1],
+    [0, 0.8],
+    [0.8, 0],
+    [0.3, 0.0],
+    [1.1, 0.45],
+    [0.6, 0.9],
+    [0, 1.],
+    [0.4, 0.4],
+    [0.2, 0.2],
+    [0.8, 0.8],
+    [0.1, 0.1],
+    [0, 0.8],
+    [0.8, 0],
+    [0.3, 0.0],
+    [1.1, 0.45],
+    [0.6, 0.9],
+    [0, 1.],
+    [0.4, 0.4],
+    [0.2, 0.2],
+    [0.8, 0.8],
+    [0.1, 0.1],
+    [0, 0.8],
+    [0.8, 0],
+    [0.3, 0.0],
+    [1.1, 0.45],
+    [0.6, 0.9],
+    [0, 1.],
+    [0.4, 0.4],
+    [0.2, 0.2],
+    [0.8, 0.8],
+    [0.1, 0.1],
+    [0, 0.8],
+    [0.8, 0],
+    [0.3, 0.0],
+    [1.1, 0.45],
+    [0.6, 0.9],
+]
+
+
+
 
 
 SENSOR_DIMS = {
     JOINT_ANGLES: 2,
     JOINT_VELOCITIES: 2,
     ACTION: 2,
+    GOAL_EE_POINTS: 2
 }
 
 BASE_DIR = '/'.join(str.split(gps_filepath, '/')[:-2])
@@ -37,7 +87,8 @@ common = {
     'data_files_dir': EXP_DIR + 'data_files/',
     'target_filename': EXP_DIR + 'target.npz',
     'log_filename': EXP_DIR + 'log.txt',
-    'conditions': 4,
+    'conditions': 1,
+    'goals': goals
 }
 
 if not os.path.exists(common['data_files_dir']):
@@ -46,21 +97,21 @@ if not os.path.exists(common['data_files_dir']):
 agent = {
     'type': AgentMuJoCo,
     'filename': './mjc_models/particle2d.xml',
-    'x0': [np.array([0., 0., 0., 0.]), np.array([0., 1., 0., 0.]),
-           np.array([1., 0., 0., 0.]), np.array([1., 1., 0., 0.])],
+    'x0': [np.array([0., 0., 0., 0.])],
     'dt': 0.05,
     'substeps': 5,
     'conditions': common['conditions'],
-    'T': 100,
+    'T': 75,
     'sensor_dims': SENSOR_DIMS,
     'state_include': [JOINT_ANGLES, JOINT_VELOCITIES],
-    'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES],
+    'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES, GOAL_EE_POINTS],
+    'goal_ee': np.array([0, 1.])
 }
 
 algorithm = {
-    'type': AlgorithmBADMM,
+    'type': AlgorithmTRPOGPS,
     'conditions': common['conditions'],
-    'iterations': 10,
+    'iterations': 10000,
     'lg_step_schedule': np.array([1e-4, 1e-3, 1e-2, 1e-2]),
     'policy_dual_rate': 0.2,
     'ent_reg_schedule': np.array([1e-3, 1e-3, 1e-2, 1e-1]),
@@ -106,13 +157,15 @@ algorithm['traj_opt'] = {
 }
 
 algorithm['policy_opt'] = {
-    'type': PolicyOptCaffe,
-    'weights_file_prefix': EXP_DIR + 'policy',
-    'iterations': 10000,
-    'network_arch_params': {
-        'n_layers': 2,
-        'dim_hidden': [20],
+    'type': PolicyOptTf,
+    'network_params': {
+        'obs_include': [JOINT_ANGLES, JOINT_VELOCITIES, GOAL_EE_POINTS],
+        'obs_vector_data': [JOINT_ANGLES, JOINT_VELOCITIES, GOAL_EE_POINTS],
+        'sensor_dims': SENSOR_DIMS,
     },
+    'network_model': example_tf_network,
+    'iterations': 6000,
+    'weights_file_prefix': EXP_DIR + 'policy',
 }
 
 algorithm['policy_prior'] = {

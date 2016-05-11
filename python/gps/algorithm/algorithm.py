@@ -167,6 +167,7 @@ class Algorithm(object):
         """
         self.iteration_count += 1
         self.prev = self.cur
+        self.old_samps = self.cur[0].sample_list
         self.cur = [IterationData() for _ in range(self.M)]
         for m in range(self.M):
             self.cur[m].traj_info = TrajectoryInfo()

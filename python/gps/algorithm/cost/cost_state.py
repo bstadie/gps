@@ -14,6 +14,13 @@ class CostState(Cost):
         config = copy.deepcopy(COST_STATE)
         config.update(hyperparams)
         Cost.__init__(self, config)
+        for data_type in self._hyperparams['data_types']:
+            config = self._hyperparams['data_types'][data_type]
+            tgt = config['target_state']
+            self.target = tgt
+
+    def update_target(self, target):
+        self.target = target
 
     def eval(self, sample):
         """
@@ -35,7 +42,8 @@ class CostState(Cost):
         for data_type in self._hyperparams['data_types']:
             config = self._hyperparams['data_types'][data_type]
             wp = config['wp']
-            tgt = config['target_state']
+            #tgt = config['target_state']
+            tgt = self.target
             x = sample.get(data_type)
             _, dim_sensor = x.shape
 

@@ -19,6 +19,10 @@ class CostFK(Cost):
         config = copy.deepcopy(COST_FK)
         config.update(hyperparams)
         Cost.__init__(self, config)
+        self.tgt = self._hyperparams['target_end_effector']
+
+    def update_target(self, tgt):
+        self.tgt = tgt
 
     def eval(self, sample):
         """
@@ -48,7 +52,7 @@ class CostFK(Cost):
         lux = np.zeros((T, dU, dX))
 
         # Choose target.
-        tgt = self._hyperparams['target_end_effector']
+        tgt = self.tgt
         pt = sample.get(END_EFFECTOR_POINTS)
         dist = pt - tgt
         # TODO - These should be partially zeros so we're not double

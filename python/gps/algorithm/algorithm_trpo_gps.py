@@ -9,12 +9,13 @@ from gps.algorithm.algorithm import Algorithm
 from gps.algorithm.algorithm_utils import PolicyInfo, gauss_fit_joint_prior
 from gps.algorithm.config import ALG_BADMM
 from gps.sample.sample_list import SampleList
+from gps.algorithm.policy.lin_gauss_init import init_from_known_traj
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-class AlgorithmBADMM(Algorithm):
+class AlgorithmTRPOGPS(Algorithm):
     """
     Sample-based joint policy learning and trajectory optimization with
     BADMM-based guided policy search algorithm.
@@ -125,6 +126,7 @@ class AlgorithmBADMM(Algorithm):
         tgt_prc, tgt_wt = np.zeros((0, T, dU, dU)), np.zeros((0, T))
         for m in range(self.M):
             samples = self.cur[m].sample_list
+            #samples = SampleList(self.cur[m].pol_info.policy_samples)
             X = samples.get_X()
             N = len(samples)
             traj, pol_info = self.cur[m].traj_distr, self.cur[m].pol_info
@@ -151,6 +153,60 @@ class AlgorithmBADMM(Algorithm):
             obs_data = np.concatenate((obs_data, samples.get_obs()))
         self.policy_opt.update(obs_data, tgt_mu, tgt_prc, tgt_wt,
                                itr, inner_itr)
+
+    def update_master_policy(self, itr, inner_itr, tgt_mu_old, tgt_prc_old, tgt_wt_old, obs_data_old):
+        """ Compute the new policy. """
+        dU, dO, T = self.dU, self.dO, self.T
+        # Compute target mean, cov, and weight for each sample.
+        obs_data, tgt_mu = np.zeros((0, T, dO)), np.zeros((0, T, dU))
+        tgt_prc, tgt_wt = np.zeros((0, T, dU, dU)), np.zeros((0, T))
+        for m in range(self.M):
+            samples = self.old_samps #self.cur[m].sample_list
+            #samples = SampleList(self.cur[m].pol_info.policy_samples)
+            X = samples.get_X()
+            N = len(samples)
+            traj, pol_info = self.cur[m].traj_distr, self.cur[m].pol_info
+            mu = np.zeros((N, T, dU))
+            prc = np.zeros((N, T, dU, dU))
+            wt = np.zeros((N, T))
+            # Get time-indexed actions.
+            for t in range(T):
+                # Compute actions along this trajectory.
+                prc[:, t, :, :] = np.tile(traj.inv_pol_covar[t, :, :],
+                                          [N, 1, 1])
+                for i in range(N):
+                    mu[i, t, :] = \
+                            (traj.K[t, :, :].dot(X[i, t, :]) + traj.k[t, :]) - \
+                            np.linalg.solve(
+                                prc[i, t, :, :],  #TODO: Divide by pol_wt[t].
+                                pol_info.lambda_K[t, :, :].dot(X[i, t, :]) + \
+                                        pol_info.lambda_k[t, :]
+                            )
+                wt[:, t].fill(pol_info.pol_wt[t])
+            tgt_mu = np.concatenate((tgt_mu, mu))
+            tgt_prc = np.concatenate((tgt_prc, prc))
+            tgt_wt = np.concatenate((tgt_wt, wt))
+            obs_data = np.concatenate((obs_data, samples.get_obs()))
+
+        tgt_mu_old += [tgt_mu]
+        tgt_prc_old += [tgt_prc]
+        tgt_wt_old += [tgt_wt]
+        obs_data_old += [obs_data]
+
+        tgt_mu_final = np.vstack(tgt_mu_old)
+        tgt_prc_final = np.vstack(tgt_prc_old)
+        tgt_wt_final = np.vstack(tgt_wt_old)
+        obs_data_final = np.vstack(obs_data_old)
+
+        itrs_old = copy.deepcopy(self.policy_opt._hyperparams['iterations'])
+        self.policy_opt._hyperparams['iterations'] = 20000
+
+        self.policy_opt.update(obs_data_final, tgt_mu_final, tgt_prc_final, tgt_wt_final,
+                               itr, inner_itr)
+
+        self.policy_opt._hyperparams['iterations'] = itrs_old
+
+        return tgt_mu_old, tgt_prc_old, tgt_wt_old, obs_data_old
 
     def _update_policy_fit(self, m, init=False):
         """
@@ -489,6 +545,31 @@ class AlgorithmBADMM(Algorithm):
 
         return predicted_cost, predicted_kl
 
+    """
+    def compute_costs(self, m, eta):
+        traj_info, traj_distr = self.cur[m].traj_info, self.cur[m].traj_distr
+        fCm, fcv = traj_info.Cm / eta, traj_info.cv / eta
+        K, ipc, k = traj_distr.K, traj_distr.inv_pol_covar, traj_distr.k
+
+        # Add in the trajectory divergence term.
+        for t in range(self.T - 1, -1, -1):
+            fCm[t, :, :] += np.vstack([
+                np.hstack([
+                    K[t, :, :].T.dot(ipc[t, :, :]).dot(K[t, :, :]),
+                    -K[t, :, :].T.dot(ipc[t, :, :])
+                ]),
+                np.hstack([
+                    -ipc[t, :, :].dot(K[t, :, :]), ipc[t, :, :]
+                ])
+            ])
+            fcv[t, :] += np.hstack([
+                K[t, :, :].T.dot(ipc[t, :, :]).dot(k[t, :]),
+                -ipc[t, :, :].dot(k[t, :])
+            ])
+
+        return fCm, fcv
+    """
+
     def compute_costs(self, m, eta):
         """ Compute cost estimates used in the LQR backward pass. """
         traj_info, traj_distr = self.cur[m].traj_info, self.cur[m].traj_distr
@@ -540,3 +621,65 @@ class AlgorithmBADMM(Algorithm):
                          PKLv[t, :] * wt) / (eta + wt)
 
         return fCm, fcv
+
+    def get_linearized_pol_from_samps(self, m, itr, samples):
+        """
+        Re-estimate the local policy values in the neighborhood of the
+        trajectory.
+        Args:
+            m: Condition
+            init: Whether this is the initial fitting of the policy.
+        """
+        init = False
+        if itr == 0:
+            init = True
+        dX, dU, T = self.dX, self.dU, self.T
+        # Choose samples to use.
+        #samples = self.cur[m].sample_list
+        N = len(samples)
+        pol_info = copy.deepcopy(self.cur[m].pol_info)
+        X = samples.get_X()
+        pol_mu, pol_sig = self.policy_opt.prob(samples.get_obs().copy())[:2]
+        pol_info.pol_mu, pol_info.pol_sig = pol_mu, pol_sig
+        # Update policy prior.
+        if init:
+            self.cur[m].pol_info.policy_prior.update(
+                samples, self.policy_opt,
+                SampleList(self.cur[m].pol_info.policy_samples)
+            )
+        else:
+            self.cur[m].pol_info.policy_prior.update(
+                SampleList([]), self.policy_opt,
+                SampleList(self.cur[m].pol_info.policy_samples)
+            )
+        # Collapse policy covariances. This is not really correct, but
+        # it works fine so long as the policy covariance doesn't depend
+        # on state.
+        pol_sig = np.mean(pol_sig, axis=0)
+        # Estimate the policy linearization at each time step.
+        for t in range(T):
+            # Assemble diagonal weights matrix and data.
+            dwts = (1.0 / N) * np.ones(N)
+            Ts = X[:, t, :]
+            Ps = pol_mu[:, t, :]
+            Ys = np.concatenate((Ts, Ps), axis=1)
+            # Obtain Normal-inverse-Wishart prior.
+            mu0, Phi, mm, n0 = self.cur[m].pol_info.policy_prior.eval(Ts, Ps)
+            sig_reg = np.zeros((dX+dU, dX+dU))
+            # On the first time step, always slightly regularize covariance.
+            if t == 0:
+                sig_reg[:dX, :dX] = 1e-8 * np.eye(dX)
+            # Perform computation.
+            pol_K, pol_k, pol_S = gauss_fit_joint_prior(Ys, mu0, Phi, mm, n0,
+                                                        dwts, dX, dU, sig_reg)
+            pol_S += pol_sig[t, :, :]
+            pol_info.pol_K[t, :, :], pol_info.pol_k[t, :] = pol_K, pol_k
+            pol_info.pol_S[t, :, :], pol_info.chol_pol_S[t, :, :] = \
+                    pol_S, sp.linalg.cholesky(pol_S)
+            inv_pol = np.linalg.inv(pol_info.pol_S)
+            return init_from_known_traj(pol_info.pol_K, pol_info.pol_k, pol_info.pol_S,
+                                        pol_info.chol_pol_S, inv_pol)
+
+    def update_trajectories_yo_mamma(self, trajectories):
+        self.cur[0].sample_list = trajectories
+        self.traj_opt.update(0, self)

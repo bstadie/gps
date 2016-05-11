@@ -48,6 +48,9 @@ class SampleList(object):
     def __getitem__(self, idx):
         return self.get_samples([idx])[0]
 
+    def append(self, thing_to_append):
+        self._samples.append(thing_to_append)
+
 
 class PickleSampleWriter(object):
     """ Pickles samples into data_file. """

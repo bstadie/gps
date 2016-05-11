@@ -1,6 +1,5 @@
 <mujoco model="Humanoid">
     <compiler coordinate="local" angle="radian" />
-    <size nlmax="50" ncmax="50" njmax="200" nctotmax="50" ngeom_user="1" nstack="82825"/>
     <default>
         <joint islimited="true" armature="0.2" damping="0.1" compliance="0.01" timeconst="0.01" />
         <geom condim="3" conaffinity="0" mindist="0.1" friction="1 0.5 0.5" rgba="0.8 0.6 0.4 1" compliance="0.01"  timeconst="0.01" />

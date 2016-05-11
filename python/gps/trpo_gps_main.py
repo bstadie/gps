@@ -45,6 +45,9 @@ class GPSMain(object):
         config['algorithm']['agent'] = self.agent
         self.algorithm = config['algorithm']['type'](config['algorithm'])
 
+        #self.x0 = config['init_states']
+        #self.goals = config['goals']
+
     def run(self, itr_load=None):
         """
         Run training by iteratively sampling and taking an iteration.
@@ -58,7 +61,8 @@ class GPSMain(object):
         for itr in range(itr_start, self._hyperparams['iterations']):
             for cond in self._train_idx:
                 for i in range(self._hyperparams['num_samples']):
-                    self._take_sample(itr, cond, i)
+                    goal, x0 = self.sample_start_and_end()
+                    self._take_sample(itr, cond, i, goal, x0)
 
             traj_sample_lists = [
                 self.agent.get_samples(cond, -self._hyperparams['num_samples'])
@@ -69,6 +73,11 @@ class GPSMain(object):
             self._log_data(itr, traj_sample_lists, pol_sample_lists)
 
         self._end()
+
+    def sample_start_and_end(self):
+        #del self.agent
+        #self.agent = config['agent']['type'](config['agent'])
+        return 0, 0
 
     def test_policy(self, itr, N):
         """
@@ -120,7 +129,7 @@ class GPSMain(object):
             if self.algorithm is None:
                 print("Error: cannot find '%s.'" % algorithm_file)
                 os._exit(1) # called instead of sys.exit(), since this is in a thread
-                
+
             if self.gui:
                 traj_sample_lists = self.data_logger.unpickle(self._data_files_dir +
                     ('traj_sample_itr_%02d.pkl' % itr_load))
@@ -133,7 +142,50 @@ class GPSMain(object):
                     'Press \'go\' to begin.') % itr_load)
             return itr_load + 1
 
-    def _take_sample(self, itr, cond, i):
+    def _get_samples_for_linearization(self, goal, x0):
+        print 'getting linearized samples'
+        N = 15 #self._hyperparams['verbose_policy_trials']
+        pol_samples = [[None for _ in range(N)] for _ in range(self._conditions)]
+        for cond in range(len(self._test_idx)):
+            #self.agent.update_goal(goal)
+            for i in range(N):
+                if i > N - 2:
+                    verbose = True
+                else:
+                    verbose = False
+                pol_samples[cond][i] = self.agent.sample(
+                    self.algorithm.policy_opt.policy, self._test_idx[cond],
+                    verbose=verbose, save=False)
+        return [SampleList(samples) for samples in pol_samples]
+
+    def update_trajs(self):
+        """
+        Compute new linear Gaussian controllers.
+        """
+        N = 5 #self._hyperparams['verbose_policy_trials']
+        pol_samples = [[None for _ in range(N)] for _ in range(self._conditions)]
+        for cond in range(len(self._test_idx)):
+            #self.agent.update_goal(goal)
+            for i in range(N):
+                if i > N - 2:
+                    verbose = True
+                else:
+                    verbose = False
+                pol_samples[cond][i] = self.agent.sample(
+                    self.algorithm.cur[0].traj_distr, self._test_idx[cond],
+                    verbose=verbose, save=False)
+        samps = [SampleList(samples) for samples in pol_samples]
+        self.algorithm.update_trajectories_yo_mamma(samps)
+
+    def get_goal(self, fake_goal):
+        return fake_goal
+        import numpy as np
+        if np.allclose(fake_goal, np.array([0.31862029,  0.65027524, -0.28322785])):
+            return np.array([1, 0, 0])
+        else:
+            return np.array([0, 1, 0])
+
+    def _take_sample(self, itr, cond, i, goal, x0):
         """
         Collect a sample from the agent.
         Args:
@@ -142,7 +194,134 @@ class GPSMain(object):
             i: Sample number.
         Returns: None
         """
+
+        if itr == 0 and i == 0:
+            self.canonicanl_traj_opt = copy.copy(self.algorithm)
+            import numpy as np
+            goal = np.array(self._hyperparams['common']['goals'][itr/2])
+            self.agent._hyperparams['goal_ee'] = self.get_goal(fake_goal=goal)
+            #self.algorithm.cost[0]._costs[1].update_target(goal)
+            self.algorithm.cost[0].update_target(goal)
+            self.tgt_mu = []
+            self.tgt_prc = []
+            self.tgt_wt = []
+            self.obs_data = []
+
+        if itr == 1 and i == 0:
+            self.master_policy = copy.copy(self.algorithm.policy_opt.policy)
+
+        if itr > 1 and i == 0 and itr % 2 == 0:
+            print 'switching goals'
+            import numpy as np
+
+            #update master policy.
+            self.algorithm.policy_opt.policy = copy.copy(self.master_policy)
+            self.tgt_mu, self.tgt_prc, self.tgt_wt, self.obs_data = self.algorithm.update_master_policy(0, 0,
+                                                                                                        self.tgt_mu,
+                                                                                                        self.tgt_prc,
+                                                                                                        self.tgt_wt,
+                                                                                                        self.obs_data)
+            self.master_policy = copy.copy(self.algorithm.policy_opt.policy)
+
+            #update goal for agent. Show user new goal and old goal.
+            #For easy problems, this should converge almost immedietly.
+            self.agent.sample(
+                    self.algorithm.policy_opt.policy, self._test_idx[cond],
+                    verbose=True, save=False)
+            goal = np.array(self._hyperparams['common']['goals'][itr/2])
+            self.agent._hyperparams['goal_ee'] = self.get_goal(fake_goal=goal)
+            self.agent.sample(
+                    self.algorithm.policy_opt.policy, self._test_idx[cond],
+                    verbose=True, save=False)
+
+
+            lin_samples = self._get_samples_for_linearization(goal, x0)
+            pol = self.algorithm.get_linearized_pol_from_samps(cond, 0, lin_samples[0])
+            self.agent.sample(
+                    pol, self._test_idx[cond],
+                    verbose=True, save=False)
+            self.canonical_lin = copy.deepcopy(pol)
+
+            #linearize policy from master
+            #if itr == 2:
+                #lin_samples = self._get_samples_for_linearization(goal, x0)
+                #pol = self.algorithm.get_linearized_pol_from_samps(cond, 0, lin_samples[0])
+
+            #if itr == 2:
+                #self.canonical_lin = pol
+            #revert to canonical traj opt
+            self.algorithm = copy.copy(self.canonicanl_traj_opt)
+
+            #set net policy and lingauss policy.
+            #self.algorithm.policy_opt.policy = copy.copy(self.master_policy)
+            #self.algorithm.cur[cond].traj_distr = copy.copy(pol)
+            self.algorithm.cur[cond].traj_distr.K[0:50] = copy.copy(self.canonical_lin.K[0:50]) #pol.K[1:50]
+            self.algorithm.cur[cond].traj_distr.k[0:50] = copy.copy(self.canonical_lin.k[0:50]) #pol.k[1:50]
+
+            #make sure we can take a big KL step next time.
+            self.algorithm.cur[0].pol_info.pol_wt = 0.001*np.ones_like(self.algorithm.cur[0].pol_info.pol_wt)
+            self.algorithm.kl_step = self.algorithm.base_kl_step
+
+            #update the goal for the LQR
+            #self.algorithm.cost[0]._costs[1].update_target(goal)
+            self.algorithm.cost[0].update_target(goal)
+
+            #self.agent.sample(
+            #        self.algorithm.policy_opt.policy, self._test_idx[cond],
+            #        verbose=True, save=False)
+            #goal = np.array(self._hyperparams['common']['goals'][itr/2])
+            #self.agent._hyperparams['goal_ee'] = self.get_goal(fake_goal=goal)
+            #self.agent.sample(
+            #        self.algorithm.policy_opt.policy, self._test_idx[cond],
+            #        verbose=True, save=False)
+
+            #update master policy.
+            #self.algorithm = copy.copy(self.canonicanl_traj_opt)
+            #self.algorithm.cost[0]._costs[1].update_target(goal)
+            #self.algorithm.cur[0].pol_info.policy_samples = copy.copy(self.samps)
+            #self.algorithm.cur[0].pol_info.pol_wt = 0.01*np.ones_like(self.algorithm.cur[0].pol_info.pol_wt)
+            #self.algorithm.policy_opt.policy = copy.copy(self.master_policy)
+            #self.algorithm._update_master_policy(0, 0)
+            #self.master_policy = copy.copy(self.algorithm.policy_opt.policy)
+            #pol_opt_pol = copy.copy(self.algorithm.policy_opt.policy)
+
+
+            #pol_opt_pol = copy.copy(self.algorithm.policy_opt.policy)
+            #self.algorithm = copy.copy(self.canonicanl_traj_opt)
+            #self.algorithm.policy_opt.policy = copy.copy(pol_opt_pol)
+            #self.algorithm.cost[0]._costs[1].update_target(goal)
+            #self.algorithm.cur[0].pol_info.pol_wt = 0.001*np.ones_like(self.algorithm.cur[0].pol_info.pol_wt)
+            #self.algorithm.kl_step = self.algorithm.base_kl_step
+            #self.algorithm.cost[0].update_target(goal)
+
+            #fit dynamics
+            #self.algorithm.update_only_dynamics(t)
+
+            #init LQR with linearized policy
+            #self.algorithm.cur[cond].traj_distr = pol
+            #self.algorithm.cur[cond].traj_distr.K[1:50] = pol.K[1:50]
+            #self.algorithm.cur[cond].traj_distr.k[1:50] = pol.k[1:50]
+            #self.algorithm.cur[0].pol_info.policy_samples = copy.copy(self.samps)
+
+            #self.algorithm.policy_opt.policy = pol_opt_pol
+            #set kl step high for LQR and tell it to more or less ignore the net on update.
+            #self.algorithm.kl_step = self.algorithm.base_kl_step
+            #self.algorithm.cur[0].pol_info.pol_wt = 0.01*np.ones_like(self.algorithm.cur[0].pol_info.pol_wt)
+
+        #if itr == 5:
+        #    box2d_dir = '/home/bradly/gps/experiments/mjc_chess_grip_experiment/data_files/policies/' + str(itr+1)
+        #    target = self.agent._hyperparams['goal_ee'] #self._hyperparams['algorithm']['cost']['costs'][1]['target_end_effector'] #mucjoco arm
+        #    self.algorithm.policy_opt.policy.pickle_policy(self.agent.dO, self.agent.dU,
+        #                                                   box2d_dir,
+        #                                                   goal_state=target, should_hash=False)
+
+        #if itr > 1 and i == 0 and itr % 2 == 1:
+        #    import numpy as np
+        #    self.algorithm.cur[0].pol_info.pol_wt = 0.000001*np.ones_like(self.algorithm.cur[0].pol_info.pol_wt)
+        #    self.algorithm.kl_step = self.algorithm.base_kl_step
+
         pol = self.algorithm.cur[cond].traj_distr
+
         if self.gui:
             self.gui.set_image_overlays(cond)   # Must call for each new cond.
             redo = True
@@ -179,6 +358,7 @@ class GPSMain(object):
         else:
             self.agent.sample(
                 pol, cond,
+                #verbose=True
                 verbose=(i < self._hyperparams['verbose_trials'])
             )
 

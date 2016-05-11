@@ -51,7 +51,6 @@
 
                                                 <body name="r_gripper_tool_frame" pos="0.18 0 0">
                                                     <site name="leg_bottom" pos="0 0 -0.15" size="0.01" />
-                                                    <site name="leg_top" pos="0 0 0.15" size="0.01" />
 
                                                 </body>
 

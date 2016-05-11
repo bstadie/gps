@@ -51,7 +51,7 @@ def get_mlp_layers(mlp_input, number_layers, dimension_hidden):
         cur_weight = init_weights([in_shape, dimension_hidden[layer_step]], name='w_' + str(layer_step))
         cur_bias = init_bias([dimension_hidden[layer_step]], name='b_' + str(layer_step))
         if layer_step != number_layers-1:  # final layer has no RELU
-            cur_top = tf.nn.relu(tf.matmul(cur_top, cur_weight) + cur_bias)
+            cur_top = tf.nn.relu6(tf.matmul(cur_top, cur_weight) + cur_bias)
         else:
             cur_top = tf.matmul(cur_top, cur_weight) + cur_bias
 
@@ -102,11 +102,18 @@ def trpo_gps_tf_network(dim_input=27, dim_output=7, batch_size=25, network_confi
 
     nn_input, action, precision = get_input_layer(dim_input, dim_output)
     mlp_applied = get_mlp_layers(nn_input, n_layers, dim_hidden)
-    loss_out = tf.pow(tf.sub(mlp_applied, action), 2)
+    loss_out = tf.sub(mlp_applied, action)
+    loss_out = loss_out*loss_out
+    loss_out = tf.reduce_sum(loss_out, [1])
+    prec = tf.placeholder('float', [None], name='prec')
+    loss_out *= prec
     loss_out = tf.reduce_mean(loss_out)
+    #loss_out = tf.reduce_mean(loss_out, [0])
+    #loss_out = tf.pow(tf.sub(mlp_applied, action), 2)
+    #loss_out = tf.reduce_mean(loss_out)
     #loss_out = get_loss_layer(mlp_out=mlp_applied, action=action, precision=precision, batch_size=batch_size)
 
-    return TfMap.init_from_lists([nn_input, action, precision], [mlp_applied], [loss_out])
+    return TfMap.init_from_lists([nn_input, action, prec], [mlp_applied], [loss_out])
 
 
 def multi_modal_network(dim_input=27, dim_output=7, batch_size=25, network_config=None):

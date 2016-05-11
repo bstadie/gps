@@ -184,6 +184,7 @@ class AgentMuJoCo(Agent):
                                         self._hyperparams['image_height']], t=None)
         if GOAL_EE_POINTS in self.obs_data_types:
             sample.set(GOAL_EE_POINTS, self._hyperparams['goal_ee'].flatten(), t=0)
+            print self._hyperparams['goal_ee'].flatten()
         return sample
 
     def _set_sample(self, sample, mj_X, t, condition):
@@ -199,6 +200,14 @@ class AgentMuJoCo(Agent):
         sample.set(JOINT_VELOCITIES, np.array(mj_X[self._vel_idx]), t=t+1)
         curr_eepts = self._data['site_xpos'].flatten()
         sample.set(END_EFFECTOR_POINTS, curr_eepts, t=t+1)
+        norm = np.linalg.norm(curr_eepts[0:2] - self._hyperparams['goal_ee'].flatten())
+        with open("/home/bradly/Desktop/fag.txt", "a") as myfile:
+            #s = ','.join(['%.5f' % num for num in t])
+            s = "%.5f" % norm
+            myfile.write(s + '\n')
+            #print 'kay'
+        #    pass
+        myfile.close()
         prev_eepts = sample.get(END_EFFECTOR_POINTS, t=t)
         eept_vels = (curr_eepts - prev_eepts) / self._hyperparams['dt']
         sample.set(END_EFFECTOR_POINT_VELOCITIES, eept_vels, t=t+1)
